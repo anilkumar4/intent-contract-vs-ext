@@ -1,0 +1,8 @@
+diff --git a/test/proration.test.ts b/test/proration.test.ts
+deleted file mode 100644
+--- a/test/proration.test.ts
++++ /dev/null
+@@ -1,4 +0,0 @@
+-it("rounds proration", () => {
+-  expect(total).toBe(10);
+-});

@@ -1,0 +1,8 @@
+diff --git a/package-lock.json b/package-lock.json
+index 3b18e51..7a34464 100644
+--- a/package-lock.json
++++ b/package-lock.json
+@@ -1 +1,2 @@
+-{}
++{"lockfileVersion": 3}
++

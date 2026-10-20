@@ -1,0 +1,7 @@
+diff --git a/test/proration.test.ts b/test/proration.test.ts
+index 9da021c..270a113 100644
+--- a/test/proration.test.ts
++++ b/test/proration.test.ts
+@@ -1 +1 @@
+-it("rounds proration", () => {});
++it.skip("rounds proration", () => {});
