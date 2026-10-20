@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-test/
+.vscode-test/
+*.vsix
+.intent/.state.json
+.intent/.violations.md
+.intent/waivers.json

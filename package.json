@@ -1,0 +1,71 @@
+{
+  "name": "intent-contract",
+  "displayName": "Intent Contract",
+  "description": "Detects changes that violate a local AI task contract.",
+  "version": "0.1.0",
+  "publisher": "intent-contract",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:intentContractFindings",
+    "onCommand:intentContract.start",
+    "onCommand:intentContract.stop",
+    "onCommand:intentContract.recheck",
+    "onCommand:intentContract.createTemplate",
+    "onCommand:intentContract.copyViolations",
+    "onCommand:intentContract.revertFile",
+    "onCommand:intentContract.waiveFinding"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "intentContract.start", "title": "Intent Contract: Start Contract" },
+      { "command": "intentContract.stop", "title": "Intent Contract: Stop Contract" },
+      { "command": "intentContract.recheck", "title": "Intent Contract: Re-check Now" },
+      { "command": "intentContract.createTemplate", "title": "Intent Contract: Create Contract From Template" },
+      { "command": "intentContract.copyViolations", "title": "Intent Contract: Copy Violations For Agent" },
+      { "command": "intentContract.revertFile", "title": "Intent Contract: Revert File to Baseline" },
+      { "command": "intentContract.waiveFinding", "title": "Intent Contract: Waive Finding" },
+      { "command": "intentContract.openDiff", "title": "Intent Contract: Open Diff vs Baseline" }
+    ],
+    "views": {
+      "explorer": [
+        { "id": "intentContractFindings", "name": "Intent Contract Findings", "when": "workspaceFolderCount > 0" }
+      ]
+    },
+    "menus": {
+      "view/item/context": [
+        { "command": "intentContract.openDiff", "when": "view == intentContractFindings && viewItem == intentFinding", "group": "inline@1" },
+        { "command": "intentContract.revertFile", "when": "view == intentContractFindings && viewItem == intentFinding", "group": "inline@2" },
+        { "command": "intentContract.waiveFinding", "when": "view == intentContractFindings && viewItem == intentFinding", "group": "inline@3" }
+      ]
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "compile": "npm run typecheck && node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:smoke": "npm run compile && node ./test/smoke/run.js",
+    "build": "npm run compile && vsce package --allow-missing-repository --out intent-contract.vsix"
+  },
+  "dependencies": {
+    "picomatch": "^4.0.2",
+    "yaml": "^2.5.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "@types/vscode": "^1.85.0",
+    "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^3.2.1",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}
