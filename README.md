@@ -64,6 +64,8 @@ The CLI reads the contract from the same policy tree it checks: the selected `--
 
 ## Development checks
 
+Use Node.js 22.12 or newer for installing dependencies, running tests, and packaging the VSIX.
+
 - `npm test` runs contract, detector, diff parsing, and Git snapshot/revert tests.
 - `npm run test:smoke` runs a minimal VS Code extension-host startup test. It uses an installed `code` executable when available; otherwise `@vscode/test-electron` downloads VS Code.
 - `npm run build` type-checks, bundles with esbuild, and packages `intent-contract.vsix`.
