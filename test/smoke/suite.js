@@ -12,7 +12,8 @@ exports.run = async function runSmoke() {
     "intentContract.recheck",
     "intentContract.copyViolations",
     "intentContract.revertFile",
-    "intentContract.waiveFinding"
+    "intentContract.waiveFinding",
+    "intentContract.exportArchitectureDrift"
   ]) {
     assert.ok(commands.includes(command), `Expected command ${command} to be registered.`);
   }

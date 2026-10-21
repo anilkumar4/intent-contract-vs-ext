@@ -3,35 +3,110 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { detectArchitectureDrift } from "../../src/detectors/architecture";
+import { detectArchitectureDrift, renderArchitectureDriftDiagram } from "../../src/detectors/architectureDrift";
+import { parseMermaid } from "../../src/architecture/diagramParser";
 import type { Contract, ParsedDiff } from "../../src/detectors/types";
 import { createWorkingTreeSnapshot } from "../../src/git/snapshot";
 import { diffTrees } from "../../src/git/diff";
 
-const temporaryRepositories: string[] = [];
+const repositories: string[] = [];
 
 afterEach(async () => {
   vi.restoreAllMocks();
-  await Promise.all(temporaryRepositories.splice(0).map((directory) => fs.rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })));
+  await Promise.all(repositories.splice(0).map((root) => fs.rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })));
 });
 
 describe("architecture drift detector", () => {
-  it("allows a new import when the diagram has the directed module edge", async () => {
-    const { root, policyTree } = await createRepository("flowchart LR\nBilling --> Shared\nInventory\n");
-    await fs.writeFile(path.join(root, "src/billing/invoice.ts"), 'import { date } from "../shared/date";\nexport { date };\n');
-    const diff = await currentDiff(root, policyTree);
-    const findings = await detectArchitectureDrift(root, policyTree, diff, contract);
+  it("renders official edges and red dashed violation edges in the export diagram", () => {
+    const graph = parseMermaid("flowchart LR\nBilling --> Shared\nInventory --> Shared\n");
+    const report = renderArchitectureDriftDiagram(graph, [{
+      sourceNode: "Billing", targetNode: "Inventory", sourceFile: "src/billing/invoice.ts",
+      targetFile: "src/inventory/stockRepository.ts", line: 12
+    }], "docs/system.mmd");
+    expect(report).toContain("linkStyle 0 stroke:#4caf50");
+    expect(report).toContain(" -.-x |VIOLATION: src/billing/invoice.ts:12 imports src/inventory/stockRepository.ts| ");
+    expect(report).toContain("stroke:#e53935");
+  });
+
+  it("allows Billing to import Shared when the diagram draws that edge", async () => {
+    const { root, policyTree } = await createRepository();
+    await fs.writeFile(path.join(root, "src/billing/invoice.ts"), 'import { log } from "../shared/logger";\nexport { log };\n');
+    const findings = await detectArchitectureDrift(root, policyTree, await currentDiff(root, policyTree), contract);
     expect(findings.filter((finding) => finding.severity === "error")).toEqual([]);
   });
 
-  it("reports a newly introduced import whose module edge is not drawn", async () => {
-    const { root, policyTree } = await createRepository("flowchart LR\nBilling --> Shared\nInventory\n");
-    await fs.writeFile(path.join(root, "src/billing/invoice.ts"), 'import { client } from "../inventory/client";\nexport { client };\n');
-    const diff = await currentDiff(root, policyTree);
-    const findings = await detectArchitectureDrift(root, policyTree, diff, contract);
-    expect(findings).toMatchObject([
-      { detector: "architecture_drift", severity: "error", file: "src/billing/invoice.ts", rule: "unlisted_edge" }
-    ]);
+  it("reports an undrawn Billing to Inventory import with the exact line and diagram", async () => {
+    const { root, policyTree } = await createRepository();
+    await fs.writeFile(path.join(root, "src/billing/invoice.ts"), [
+      "export const invoice = 1;",
+      'import { stock } from "../inventory/stockRepository";'
+    ].join("\n"));
+    const findings = await detectArchitectureDrift(root, policyTree, await currentDiff(root, policyTree), contract);
+    const error = findings.find((finding) => finding.severity === "error");
+    const tick = String.fromCharCode(96);
+    expect(error).toMatchObject({
+      detector: "architecture_drift",
+      severity: "error",
+      file: "src/billing/invoice.ts",
+      line: 2,
+      message: "Architectural Drift: Module " + tick + "Billing" + tick + " (" + tick + "src/billing/invoice.ts" + tick +
+        ") imports from " + tick + "Inventory" + tick + " (" + tick + "src/inventory/stockRepository.ts" + tick +
+        "), which violates " + tick + "docs/system.mmd" + tick + " (allowed outgoing dependencies from " +
+        tick + "Billing" + tick + ": " + tick + "Shared" + tick + ")."
+    });
+  });
+
+  it("checks existing imports in a modified file instead of only newly added imports", async () => {
+    const { root } = await createRepository();
+    await fs.writeFile(path.join(root, "src/billing/invoice.ts"), 'import "../inventory/stockRepository";\n');
+    git(root, ["add", "src/billing/invoice.ts"]);
+    git(root, ["commit", "-m", "add pre-existing boundary import"]);
+    const nextPolicy = git(root, ["rev-parse", "HEAD^{tree}"]).trim();
+    await fs.appendFile(path.join(root, "src/billing/invoice.ts"), "export const changed = true;\n");
+    const findings = await detectArchitectureDrift(root, nextPolicy, await currentDiff(root, nextPolicy), contract);
+    expect(findings.some((finding) => finding.rule === "unlisted_edge" && finding.line === 1)).toBe(true);
+  });
+
+  it("resolves tsconfig paths aliases to repository modules", async () => {
+    const { root, policyTree } = await createRepository();
+    await fs.writeFile(path.join(root, "tsconfig.json"), JSON.stringify({
+      compilerOptions: {
+        module: "commonjs",
+        moduleResolution: "node",
+        baseUrl: ".",
+        paths: { "@/*": ["src/*"] }
+      }
+    }));
+    await fs.writeFile(path.join(root, "src/billing/invoice.ts"), 'import "@/inventory/stockRepository";\n');
+    const findings = await detectArchitectureDrift(root, policyTree, await currentDiff(root, policyTree), contract);
+    expect(findings).toContainEqual(expect.objectContaining({
+      detector: "architecture_drift", severity: "error", file: "src/billing/invoice.ts", line: 1
+    }));
+  });
+
+  it("resolves Python package imports to diagram nodes", async () => {
+    const { root, policyTree } = await createRepository();
+    await fs.writeFile(path.join(root, "src/billing/invoice.py"), "from ..inventory import stockRepository\n");
+    await fs.writeFile(path.join(root, "src/inventory/stockRepository.py"), "stock = 1\n");
+    const findings = await detectArchitectureDrift(root, policyTree, await currentDiff(root, policyTree), contract);
+    expect(findings).toContainEqual(expect.objectContaining({
+      detector: "architecture_drift", severity: "error", file: "src/billing/invoice.py", line: 1
+    }));
+  });
+
+  it("resolves Go module imports to diagram nodes", async () => {
+    const { root, policyTree } = await createRepository();
+    await fs.writeFile(path.join(root, "go.mod"), "module example.com/app\n");
+    await fs.writeFile(path.join(root, "src/billing/invoice.go"), [
+      "package billing",
+      "import \"example.com/app/src/inventory\"",
+      "func Invoice() {}"
+    ].join("\n"));
+    await fs.writeFile(path.join(root, "src/inventory/repository.go"), "package inventory\n");
+    const findings = await detectArchitectureDrift(root, policyTree, await currentDiff(root, policyTree), contract);
+    expect(findings).toContainEqual(expect.objectContaining({
+      detector: "architecture_drift", severity: "error", file: "src/billing/invoice.go", line: 2
+    }));
   });
 });
 
@@ -52,31 +127,29 @@ const contract: Contract = {
   allow_exceptions: false
 };
 
-async function createRepository(diagram: string): Promise<{ root: string; policyTree: string }> {
+async function createRepository(): Promise<{ root: string; policyTree: string }> {
   vi.spyOn(os, "tmpdir").mockReturnValue(process.cwd());
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "intent-architecture-test-"));
-  temporaryRepositories.push(root);
+  repositories.push(root);
   git(root, ["init", "-q"]);
   git(root, ["config", "user.name", "Intent Contract Test"]);
   git(root, ["config", "user.email", "intent-test@example.invalid"]);
-  await fs.mkdir(path.join(root, "docs"), { recursive: true });
-  await fs.mkdir(path.join(root, "src/billing"), { recursive: true });
-  await fs.mkdir(path.join(root, "src/inventory"), { recursive: true });
-  await fs.mkdir(path.join(root, "src/shared"), { recursive: true });
-  await fs.writeFile(path.join(root, "docs/system.mmd"), diagram);
+  for (const directory of ["docs", "src/billing", "src/inventory", "src/shared"]) {
+    await fs.mkdir(path.join(root, directory), { recursive: true });
+  }
+  await fs.writeFile(path.join(root, "docs/system.mmd"), "flowchart LR\nBilling --> Shared\nInventory --> Shared\n");
   await fs.writeFile(path.join(root, "tsconfig.json"), '{"compilerOptions":{"module":"commonjs","moduleResolution":"node"}}\n');
   await fs.writeFile(path.join(root, "src/billing/invoice.ts"), "export const invoice = 1;\n");
-  await fs.writeFile(path.join(root, "src/inventory/client.ts"), "export const client = 1;\n");
-  await fs.writeFile(path.join(root, "src/shared/date.ts"), "export const date = 1;\n");
+  await fs.writeFile(path.join(root, "src/inventory/stockRepository.ts"), "export const stock = 1;\n");
+  await fs.writeFile(path.join(root, "src/shared/logger.ts"), "export const log = 1;\n");
   git(root, ["add", "."]);
   git(root, ["commit", "-m", "baseline"]);
   return { root, policyTree: git(root, ["rev-parse", "HEAD^{tree}"]).trim() };
 }
 
-async function currentDiff(root: string, policyTree: string): Promise<ParsedDiff> {
-  return diffTrees(root, policyTree, await createWorkingTreeSnapshot(root));
+async function currentDiff(root: string, baseTree: string): Promise<ParsedDiff> {
+  return diffTrees(root, baseTree, await createWorkingTreeSnapshot(root));
 }
-
 function git(root: string, args: string[]): string {
   return execFileSync("git", ["-C", root, ...args], { encoding: "utf8", windowsHide: true });
 }

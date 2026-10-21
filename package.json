@@ -4,6 +4,10 @@
   "description": "Detects changes that violate a local AI task contract.",
   "version": "0.1.0",
   "publisher": "intent-contract",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anilkumar4/intent-contract-vs-ext.git"
+  },
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
@@ -19,7 +23,8 @@
     "onCommand:intentContract.copyViolations",
     "onCommand:intentContract.revertFile",
     "onCommand:intentContract.waiveFinding",
-    "onCommand:intentContract.configureAgents"
+    "onCommand:intentContract.configureAgents",
+    "onCommand:intentContract.exportArchitectureDrift"
   ],
   "main": "./dist/extension.js",
   "bin": {
@@ -35,6 +40,7 @@
       { "command": "intentContract.revertFile", "title": "Intent Contract: Revert File to Baseline" },
       { "command": "intentContract.waiveFinding", "title": "Intent Contract: Waive Finding" },
       { "command": "intentContract.configureAgents", "title": "Intent Contract: Configure AI Agents & MCP" },
+      { "command": "intentContract.exportArchitectureDrift", "title": "Intent Contract: Export Architecture Drift Diagram" },
       { "command": "intentContract.openDiff", "title": "Intent Contract: Open Diff vs Baseline" }
     ],
     "views": {

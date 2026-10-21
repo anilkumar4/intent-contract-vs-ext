@@ -5,6 +5,7 @@ import { createDefaultContract, ensureIntentMetadataIgnored } from "./contract/t
 import { discoverContracts, loadContract, parseContract } from "./contract/loader";
 import type { Contract } from "./contract/schema";
 import { detectFindingsForWorkspace } from "./detectors";
+import { analyzeArchitectureDrift, renderArchitectureDriftDiagram } from "./detectors/architectureDrift";
 import type { FileChange, Finding } from "./detectors/types";
 import { diffTrees } from "./git/diff";
 import { captureBaseline, createWorkingTreeSnapshot, releaseBaseline } from "./git/snapshot";
@@ -33,6 +34,9 @@ let checkTimer: ReturnType<typeof setTimeout> | undefined;
 let statusBar: ContractStatusBar;
 let treeProvider: FindingsTreeProvider;
 let diagnostics: FindingDiagnostics;
+let architecturePreviewText = "";
+let architecturePreviewEmitter: vscode.EventEmitter<vscode.Uri>;
+let architecturePreviewUri: vscode.Uri;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   output = vscode.window.createOutputChannel("Intent Contract");
@@ -40,6 +44,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   treeProvider = new FindingsTreeProvider();
   diagnostics = new FindingDiagnostics();
   context.subscriptions.push(output, statusBar, treeProvider, diagnostics);
+  architecturePreviewEmitter = new vscode.EventEmitter<vscode.Uri>();
+  architecturePreviewUri = vscode.Uri.parse("intent-contract-architecture:/architecture-drift-preview.md");
+  context.subscriptions.push(
+    architecturePreviewEmitter,
+    vscode.workspace.registerTextDocumentContentProvider("intent-contract-architecture", {
+      onDidChange: architecturePreviewEmitter.event,
+      provideTextDocumentContent: () => architecturePreviewText
+    })
+  );
 
   context.subscriptions.push(vscode.window.registerTreeDataProvider("intentContractFindings", treeProvider));
 
@@ -66,6 +79,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("intentContract.createTemplate", () => createTemplate()),
     vscode.commands.registerCommand("intentContract.copyViolations", () => copyFindingsForAgent(actionContext)),
     vscode.commands.registerCommand("intentContract.configureAgents", () => configureAgents(context)),
+    vscode.commands.registerCommand("intentContract.exportArchitectureDrift", () => exportArchitectureDriftDiagram()),
     vscode.commands.registerCommand("intentContract.openDiff", async (value?: unknown) => openFindingDiff(unwrapFinding(value) ?? await chooseCurrentFinding(), actionContext)),
     vscode.commands.registerCommand("intentContract.revertFile", async (value?: unknown) => revertFindingFile(unwrapFinding(value) ?? await chooseCurrentFinding(), actionContext)),
     vscode.commands.registerCommand("intentContract.waiveFinding", (value?: unknown) => waiveFinding(unwrapFinding(value), actionContext)),
@@ -255,6 +269,53 @@ async function performCheck(): Promise<void> {
     const message = `Intent Contract check failed: ${errorMessage(error)}`;
     output.appendLine(message);
     void vscode.window.showErrorMessage(message);
+  }
+}
+
+async function exportArchitectureDriftDiagram(): Promise<void> {
+  if (!root || !session || !contract) {
+    void vscode.window.showWarningMessage("Start an Intent Contract before exporting its architecture drift diagram.");
+    return;
+  }
+  if (!contract.architecture || !contract.forbid.includes("architecture_drift")) {
+    void vscode.window.showWarningMessage("The active contract does not enable architecture_drift.");
+    return;
+  }
+  await runCheck();
+  try {
+    const currentTreeHash = await createWorkingTreeSnapshot(root);
+    const currentDiff = await diffTrees(root, session.baselineTreeHash, currentTreeHash);
+    changes = currentDiff.changes;
+    const analysis = await analyzeArchitectureDrift(
+      root,
+      session.baselineTreeHash,
+      currentDiff,
+      contract,
+      session.activeContract
+    );
+    if (!analysis.graph.nodes.size) {
+      throw new Error(analysis.findings[0]?.message ?? "The architecture diagram contains no recognized nodes.");
+    }
+    const diagram = renderArchitectureDriftDiagram(analysis.graph, analysis.violations, contract.architecture.diagram);
+    const outputPath = path.join(root, ".intent", ".architecture-drift.mmd");
+    await fs.mkdir(path.dirname(outputPath), { recursive: true });
+    await fs.writeFile(outputPath, diagram, "utf8");
+
+    const fence = String.fromCharCode(96).repeat(3);
+    architecturePreviewText = "# Architecture drift report\n\nOfficial policy: " + contract.architecture.diagram +
+      "\n\n" + fence + "mermaid\n" + diagram + fence + "\n";
+    architecturePreviewEmitter.fire(architecturePreviewUri);
+    try {
+      await vscode.commands.executeCommand("markdown.showPreview", architecturePreviewUri, vscode.ViewColumn.Beside);
+    } catch {
+      const document = await vscode.workspace.openTextDocument(vscode.Uri.file(outputPath));
+      await vscode.window.showTextDocument(document, vscode.ViewColumn.Beside);
+    }
+    void vscode.window.showInformationMessage(
+      "Exported " + analysis.violations.length + " architecture violation(s) to .intent/.architecture-drift.mmd."
+    );
+  } catch (error) {
+    void vscode.window.showErrorMessage("Could not export the architecture drift diagram: " + errorMessage(error));
   }
 }
 

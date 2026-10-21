@@ -5,7 +5,7 @@ import { detectScope } from "./scope";
 import { detectSymbolScope } from "./symbolScope";
 import { detectTautologicalTests } from "./tautologicalTests";
 import { detectTestWeakening } from "./testWeakening";
-import { detectArchitectureDrift } from "./architecture";
+import { detectArchitectureDrift } from "./architectureDrift";
 
 export function detectFindings(diff: ParsedDiff, contract: Contract): Finding[] {
   return [

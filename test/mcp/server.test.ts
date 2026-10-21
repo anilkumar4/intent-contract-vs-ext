@@ -52,6 +52,23 @@ describe("MCP stdio JSON-RPC protocol", () => {
     expect(await fs.readFile(path.join(root, "test/locked.txt"), "utf8")).toBe("baseline\n");
     expect(git(root, ["diff", "--cached", "--binary"])).toBe(stagedBefore);
   });
+
+  it("enforces architecture_drift through verify_intent_contract", async () => {
+    const root = await createArchitectureRepository();
+    await startIntentContract(root, "architecture");
+    await fs.writeFile(path.join(root, "src/billing/invoice.ts"), 'import "../inventory/db";\n');
+
+    const verification = JSON.parse((await handleRpcMessage(JSON.stringify({
+      jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "verify_intent_contract", arguments: {} }
+    }), root)) ?? "{}") as {
+      result: { structuredContent: { passed: boolean; errorCount: number; findings: Array<{ detector: string; file: string }> } };
+    };
+    expect(verification.result.structuredContent).toMatchObject({
+      passed: false,
+      errorCount: 1,
+      findings: [expect.objectContaining({ detector: "architecture_drift", file: "src/billing/invoice.ts" })]
+    });
+  });
 });
 
 async function createRepository(): Promise<string> {
@@ -77,6 +94,40 @@ async function createRepository(): Promise<string> {
   await fs.writeFile(path.join(root, "src/app.ts"), "export const app = 1;\n");
   git(root, ["add", "."]);
   git(root, ["commit", "-m", "baseline"]);
+  return root;
+}
+
+async function createArchitectureRepository(): Promise<string> {
+  vi.spyOn(os, "tmpdir").mockReturnValue(process.cwd());
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "intent-mcp-architecture-test-"));
+  temporaryRepositories.push(root);
+  git(root, ["init", "-q"]);
+  git(root, ["config", "user.name", "Intent Contract Test"]);
+  git(root, ["config", "user.email", "intent-test@example.invalid"]);
+  for (const directory of [".intent", "docs", "src/billing", "src/inventory", "src/shared"]) {
+    await fs.mkdir(path.join(root, directory), { recursive: true });
+  }
+  await fs.writeFile(path.join(root, ".intent/architecture.yaml"), [
+    "name: architecture",
+    "intent: Keep architecture boundaries",
+    "scope:",
+    "  modify: [\"src/**\"]",
+    "architecture:",
+    "  diagram: docs/system.mmd",
+    "  node_mappings:",
+    "    Billing: [\"src/billing/**\"]",
+    "    Inventory: [\"src/inventory/**\"]",
+    "    Shared: [\"src/shared/**\"]",
+    "  default_policy: deny_unlisted_edges",
+    "forbid: [architecture_drift]",
+    "allow_exceptions: false"
+  ].join("\n") + "\n");
+  await fs.writeFile(path.join(root, "docs/system.mmd"), "flowchart LR\nBilling --> Shared\nInventory --> Shared\n");
+  await fs.writeFile(path.join(root, "src/billing/invoice.ts"), "export const invoice = 1;\n");
+  await fs.writeFile(path.join(root, "src/inventory/db.ts"), "export const db = 1;\n");
+  await fs.writeFile(path.join(root, "src/shared/logger.ts"), "export const log = 1;\n");
+  git(root, ["add", "."]);
+  git(root, ["commit", "-m", "architecture baseline"]);
   return root;
 }
 

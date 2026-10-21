@@ -37,6 +37,26 @@ describe("headless CLI", () => {
     expect(output.join("")).toContain("Intent Contract passed");
     expect(output.join("")).not.toContain("::error ");
   });
+
+  it("enforces architecture_drift for a contract passed to check", async () => {
+    const root = await createArchitectureRepository();
+    await fs.writeFile(path.join(root, "src/billing/invoice.ts"), 'import "../inventory/db";\n');
+    const output: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {
+      output.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+      return true;
+    }) as typeof process.stdout.write);
+
+    const code = await runCli([
+      "check", "--base", "HEAD", "--contract", ".intent/architecture.yaml", "--format", "json"
+    ], root);
+    expect(code).toBe(1);
+    expect(JSON.parse(output.join(""))).toMatchObject({
+      passed: false,
+      errorCount: 1,
+      findings: [expect.objectContaining({ detector: "architecture_drift", file: "src/billing/invoice.ts" })]
+    });
+  });
 });
 
 async function createRepository(): Promise<string> {
@@ -58,6 +78,40 @@ async function createRepository(): Promise<string> {
   await fs.writeFile(path.join(root, "package.json"), '{"name":"sample"}\n');
   git(root, ["add", "."]);
   git(root, ["commit", "-m", "initial"]);
+  return root;
+}
+
+async function createArchitectureRepository(): Promise<string> {
+  vi.spyOn(os, "tmpdir").mockReturnValue(process.cwd());
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "intent-cli-architecture-test-"));
+  temporaryRepositories.push(root);
+  git(root, ["init", "-q"]);
+  git(root, ["config", "user.name", "Intent Contract Test"]);
+  git(root, ["config", "user.email", "intent-test@example.invalid"]);
+  for (const directory of [".intent", "docs", "src/billing", "src/inventory", "src/shared"]) {
+    await fs.mkdir(path.join(root, directory), { recursive: true });
+  }
+  await fs.writeFile(path.join(root, ".intent/architecture.yaml"), [
+    "name: architecture",
+    "intent: Keep architecture boundaries",
+    "scope:",
+    "  modify: [\"src/**\"]",
+    "architecture:",
+    "  diagram: docs/system.mmd",
+    "  node_mappings:",
+    "    Billing: [\"src/billing/**\"]",
+    "    Inventory: [\"src/inventory/**\"]",
+    "    Shared: [\"src/shared/**\"]",
+    "  default_policy: deny_unlisted_edges",
+    "forbid: [architecture_drift]",
+    "allow_exceptions: false"
+  ].join("\n") + "\n");
+  await fs.writeFile(path.join(root, "docs/system.mmd"), "flowchart LR\nBilling --> Shared\nInventory --> Shared\n");
+  await fs.writeFile(path.join(root, "src/billing/invoice.ts"), "export const invoice = 1;\n");
+  await fs.writeFile(path.join(root, "src/inventory/db.ts"), "export const db = 1;\n");
+  await fs.writeFile(path.join(root, "src/shared/logger.ts"), "export const log = 1;\n");
+  git(root, ["add", "."]);
+  git(root, ["commit", "-m", "architecture baseline"]);
   return root;
 }
 
