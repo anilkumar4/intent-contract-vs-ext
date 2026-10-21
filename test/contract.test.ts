@@ -18,7 +18,7 @@ describe("contract loading", () => {
     await fs.writeFile(filePath, "name: task\nintent: Fix the billing issue\nscope:\n  modify: [billing/**]\n");
     await expect(loadContract(filePath)).resolves.toMatchObject({
       name: "task",
-      scope: { modify: ["billing/**"], read_only: [] },
+      scope: { modify: ["billing/**"], read_only: [], modify_symbols: [] },
       forbid: [],
       allow_exceptions: false
     });

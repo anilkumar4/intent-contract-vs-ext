@@ -1,4 +1,4 @@
-export type DetectorId = "scope" | "dependencies" | "high_risk_files" | "test_weakening";
+export type DetectorId = "scope" | "symbol_scope" | "dependencies" | "high_risk_files" | "test_weakening" | "tautological_tests";
 export type Severity = "error" | "warning";
 export type ChangeStatus = "A" | "M" | "D" | "R" | "C" | "T" | "U";
 
@@ -20,6 +20,7 @@ export interface Contract {
   scope: {
     modify: string[];
     read_only: string[];
+    modify_symbols?: string[];
   };
   forbid: Array<"new_dependencies" | "test_weakening" | "high_risk_files">;
   allow_exceptions: boolean;
