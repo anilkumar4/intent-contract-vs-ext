@@ -1,5 +1,5 @@
 import { gitBuffer, gitText } from "./cli";
-import type { ChangeStatus, DiffLine, FileChange, ParsedDiff } from "../detectors/types";
+import type { ChangeStatus, DiffHunk, DiffHunkLine, DiffLine, FileChange, ParsedDiff } from "../detectors/types";
 import { toRepoPath } from "../util/paths";
 
 interface NameStatusEntry {
@@ -36,11 +36,12 @@ export function parseUnifiedDiff(nameStatusOutput: string, patch: string): Parse
     .filter((section) => section.startsWith("diff --git "));
   const changes = entries.map((entry, entryIndex): FileChange => {
     const section = sections[entryIndex] ?? "";
-    const { additions, deletions, binary } = parseSection(section);
+    const { additions, deletions, hunks, binary } = parseSection(section);
     return {
       ...entry,
       additions,
       deletions,
+      hunks,
       binary
     };
   });
@@ -80,33 +81,40 @@ async function readTreeText(root: string, treeHash: string, repoPath: string): P
   }
 }
 
-function parseSection(section: string): { additions: DiffLine[]; deletions: DiffLine[]; binary: boolean } {
+function parseSection(section: string): { additions: DiffLine[]; deletions: DiffLine[]; hunks: DiffHunk[]; binary: boolean } {
   const additions: DiffLine[] = [];
   const deletions: DiffLine[] = [];
+  const hunks: DiffHunk[] = [];
   const lines = section.split(/\r?\n/);
   const binary = lines.some((line) => line.startsWith("Binary files ") || line === "GIT binary patch");
   let oldLine = 0;
   let newLine = 0;
-  let inHunk = false;
+  let currentHunk: DiffHunk | undefined;
   for (const line of lines) {
-    const hunk = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
-    if (hunk) {
-      oldLine = Number(hunk[1]);
-      newLine = Number(hunk[2]);
-      inHunk = true;
+    const hunkHeader = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
+    if (hunkHeader) {
+      oldLine = Number(hunkHeader[1]);
+      newLine = Number(hunkHeader[2]);
+      currentHunk = { oldStart: oldLine, newStart: newLine, lines: [] };
+      hunks.push(currentHunk);
       continue;
     }
-    if (line.startsWith("+++ ") || line.startsWith("--- ") || line.startsWith("\\")) continue;
-    if (line.startsWith("+") && inHunk) {
-      additions.push({ kind: "add", text: line.slice(1), newLine });
+    if (!currentHunk || line.startsWith("\\")) continue;
+    if (line.startsWith("+")) {
+      const hunkLine: DiffHunkLine = { kind: "add", text: line.slice(1), oldLine, newLine };
+      currentHunk.lines.push(hunkLine);
+      additions.push({ kind: "add", text: hunkLine.text, oldLine, newLine });
       newLine += 1;
-    } else if (line.startsWith("-") && inHunk) {
-      deletions.push({ kind: "delete", text: line.slice(1), oldLine });
+    } else if (line.startsWith("-")) {
+      const hunkLine: DiffHunkLine = { kind: "delete", text: line.slice(1), oldLine, newLine };
+      currentHunk.lines.push(hunkLine);
+      deletions.push({ kind: "delete", text: hunkLine.text, oldLine, newLine });
       oldLine += 1;
-    } else if (line.startsWith(" ") && inHunk) {
+    } else if (line.startsWith(" ")) {
+      currentHunk.lines.push({ kind: "context", text: line.slice(1), oldLine, newLine });
       oldLine += 1;
       newLine += 1;
     }
   }
-  return { additions, deletions, binary };
+  return { additions, deletions, hunks, binary };
 }

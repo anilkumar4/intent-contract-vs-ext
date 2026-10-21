@@ -1,0 +1,5 @@
+diff --git a/billing/deleted.test.ts b/billing/deleted.test.ts
+deleted file mode 100644
+index 1111111..0000000
+--- a/billing/deleted.test.ts
++++ /dev/null

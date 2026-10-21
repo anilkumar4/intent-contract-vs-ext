@@ -8,7 +8,8 @@ export function makeFinding(
   evidence: string,
   severity: Severity,
   message: string,
-  line?: number
+  line?: number,
+  remediation?: string
 ): Finding {
   const normalizedFile = file.replace(/\\/g, "/");
   const id = createHash("sha256")
@@ -18,10 +19,12 @@ export function makeFinding(
   return {
     id,
     detector,
+    rule,
     severity,
     file: normalizedFile,
     ...(line === undefined ? {} : { line }),
     message,
-    evidence
+    evidence,
+    ...(remediation ? { remediation } : {})
   };
 }

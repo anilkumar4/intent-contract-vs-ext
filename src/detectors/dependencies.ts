@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { Contract, Finding, FileChange } from "./types";
 import { makeFinding } from "./finding";
+import { changedLine, diffEvidence } from "./diffEvidence";
 
 const dependencySections = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
 const lockfiles = new Set([
@@ -23,12 +24,14 @@ export function detectDependencies(changes: FileChange[], contract: Contract): F
       .sort(([left], [right]) => left.localeCompare(right));
     for (const [name, version] of updated) {
       const oldVersion = before.get(name);
-      const evidence = oldVersion === undefined ? `${name}=${version}` : `${name}: ${oldVersion} -> ${version}`;
-      const line = change.additions.find((item) => item.text.includes(name))?.newLine;
+      const dependencyChange = oldVersion === undefined ? `${name}=${version}` : `${name}: ${oldVersion} -> ${version}`;
+      const evidence = `${dependencyChange}\n${diffEvidence(change, name)}`;
+      const line = changedLine(change, name);
       findings.push(makeFinding(
         "dependencies", afterPath, "dependency_changed", evidence, "error",
         oldVersion === undefined ? `New dependency added: ${name}` : `Dependency version changed: ${name}`,
-        line
+        line,
+        "Revert the dependency change unless it is required and explicitly approved; implement the requested behavior using the current dependency set."
       ));
     }
   }
@@ -38,14 +41,16 @@ export function detectDependencies(changes: FileChange[], contract: Contract): F
       const manifest = correspondingManifest(lockfile);
       const paired = manifest !== undefined && changedManifests.some((candidate) => changePaths(candidate).includes(manifest));
       const severity = paired ? "warning" : "error";
-      const evidence = paired
-        ? `lockfile changed with ${manifest}`
-        : `lockfile changed without ${manifest ?? "a matching manifest"}`;
+      const evidence = `${paired ? `lockfile changed with ${manifest}` : `lockfile changed without ${manifest ?? "a matching manifest"}`}\n${diffEvidence(change)}`;
       findings.push(makeFinding(
         "dependencies", lockfile, "lockfile_changed", evidence, severity,
         paired
           ? `Lockfile changed: ${path.posix.basename(lockfile)}`
-          : `Lockfile changed without a matching manifest change: ${path.posix.basename(lockfile)}`
+          : `Lockfile changed without a matching manifest change: ${path.posix.basename(lockfile)}`,
+        changedLine(change),
+        paired
+          ? "Review the lockfile updates and keep them aligned with the approved manifest change; revert unrelated package churn."
+          : "Revert the lockfile change or update the matching manifest only when a dependency change is explicitly approved."
       ));
     }
   }

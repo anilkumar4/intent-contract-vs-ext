@@ -1,0 +1,21 @@
+diff --git a/billing/result.test.ts b/billing/result.test.ts
+index 1111111..2222222 100644
+--- a/billing/result.test.ts
++++ b/billing/result.test.ts
+@@ -1,1 +1,1 @@
+-expect(res).not.toBeDefined();
++expect(res).toBeDefined();
+diff --git a/test_active.py b/test_active.py
+index 1111111..2222222 100644
+--- a/test_active.py
++++ b/test_active.py
+@@ -1 +1 @@
+-    assert not active
++    assert active
+diff --git a/test_result.py b/test_result.py
+index 1111111..2222222 100644
+--- a/test_result.py
++++ b/test_result.py
+@@ -1 +1 @@
+-    assert result is not None
++    assert result is None

@@ -2,6 +2,7 @@ import path from "node:path";
 import type { Contract, Finding, FileChange } from "./types";
 import { makeFinding } from "./finding";
 import { isLockfile } from "./dependencies";
+import { changedLine, diffEvidence } from "./diffEvidence";
 
 export function detectHighRiskFiles(changes: FileChange[], contract: Contract): Finding[] {
   if (!contract.forbid.includes("high_risk_files")) return [];
@@ -14,8 +15,10 @@ export function detectHighRiskFiles(changes: FileChange[], contract: Contract): 
       const rule = highRiskRule(file);
       if (!rule) continue;
       findings.push(makeFinding(
-        "high_risk_files", file, rule, `${rule}: ${file}`, "error",
-        `High-risk file changed: ${file}`
+        "high_risk_files", file, rule, diffEvidence(change), "error",
+        `High-risk file changed: ${file}`,
+        changedLine(change),
+        "Review this high-risk change with the contract owner and restore the baseline unless the change was explicitly approved."
       ));
     }
   }

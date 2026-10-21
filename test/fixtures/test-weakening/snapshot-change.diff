@@ -1,0 +1,7 @@
+diff --git a/billing/__snapshots__/calc.test.ts.snap b/billing/__snapshots__/calc.test.ts.snap
+index 1111111..2222222 100644
+--- a/billing/__snapshots__/calc.test.ts.snap
++++ b/billing/__snapshots__/calc.test.ts.snap
+@@ -1 +1 @@
+-exports[`calc renders 1`] = `old`;
++exports[`calc renders 1`] = `new`;

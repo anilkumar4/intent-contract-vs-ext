@@ -1,0 +1,12 @@
+diff --git a/billing/new.test.ts b/billing/new.test.ts
+new file mode 100644
+--- /dev/null
++++ b/billing/new.test.ts
+@@ -0,0 +1,7 @@
++describe("new behavior", () => {
++  it("checks results", () => {
++    expect(first()).toEqual(1);
++    expect(second()).toBeCloseTo(2.5, 2);
++    expect(third()).toHaveBeenCalledTimes(1);
++  });
++});

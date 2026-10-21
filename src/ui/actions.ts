@@ -3,6 +3,7 @@ import { revertFileToBaseline } from "../git/revert";
 import type { FileChange, Finding } from "../detectors/types";
 import type { ContractSession } from "../state/session";
 import { addWaiver, type Waiver } from "../state/waivers";
+import { formatFindingsForAgent } from "../state/formatViolations";
 import { resolveRepoFile } from "../util/paths";
 
 export interface ActionContext {
@@ -85,13 +86,7 @@ export async function waiveFinding(finding: Finding | undefined, context: Action
 
 export async function copyFindingsForAgent(context: ActionContext): Promise<void> {
   const active = context.getFindings().filter((finding) => !context.getWaivers().has(finding.id));
-  const lines = active.length === 0
-    ? ["Intent Contract detected no active violations."]
-    : [
-        "Please correct these detected changes to follow the task contract:",
-        ...active.map((finding) => `- [${finding.severity.toUpperCase()}] ${finding.file}${finding.line ? `:${finding.line}` : ""}: ${finding.message}. Evidence: ${finding.evidence}`)
-      ];
-  await vscode.env.clipboard.writeText(lines.join("\n"));
+  await vscode.env.clipboard.writeText(formatFindingsForAgent(active));
   void vscode.window.showInformationMessage("Intent Contract findings copied to the clipboard.");
 }
 

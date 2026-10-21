@@ -1,0 +1,9 @@
+diff --git a/billing/rename.test.ts b/billing/rename.test.ts
+index 1111111..2222222 100644
+--- a/billing/rename.test.ts
++++ b/billing/rename.test.ts
+@@ -1,4 +1,4 @@
+-  const result = calculate();
+-  expect(result).toEqual({ id: 1 });
++  const actual = calculate();
++  expect(actual).toEqual({ id: 1 });

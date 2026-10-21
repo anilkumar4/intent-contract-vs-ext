@@ -1,0 +1,7 @@
+diff --git a/billing/calc.test.ts b/billing/calc.test.ts
+index 1111111..2222222 100644
+--- a/billing/calc.test.ts
++++ b/billing/calc.test.ts
+@@ -1 +1 @@
+-expect(output).toMatchInlineSnapshot("old output");
++expect(output).toMatchInlineSnapshot("new output");

@@ -37,7 +37,7 @@ describe("dependency detector", () => {
   it("reports a devDependency version change", () => {
     const change = manifestChange("package.json", "{\"devDependencies\":{\"vitest\":\"^2.0.0\"}}", "{\"devDependencies\":{\"vitest\":\"^2.1.0\"}}");
     expect(detectDependencies([change], contract)).toMatchObject([
-      { severity: "error", evidence: "vitest: ^2.0.0 -> ^2.1.0" }
+      { severity: "error", evidence: expect.stringContaining("vitest: ^2.0.0 -> ^2.1.0") }
     ]);
   });
 

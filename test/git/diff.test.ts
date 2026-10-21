@@ -32,4 +32,21 @@ describe("Git diff parsing", () => {
     expect(parsed.changes[0].deletions[0].text).toBe("--old");
     expect(parsed.changes[0].additions[0].text).toBe("++new");
   });
+
+  it("preserves hunk boundaries, context, and both-side line positions", () => {
+    const parsed = parseUnifiedDiff(
+      "M\0src/value.test.ts\0",
+      "diff --git a/src/value.test.ts b/src/value.test.ts\n@@ -4,3 +4,3 @@\n before();\n-oldValue();\n+newValue();\n after();\n"
+    );
+    expect(parsed.changes[0].hunks).toMatchObject([{
+      oldStart: 4,
+      newStart: 4,
+      lines: [
+        { kind: "context", text: "before();", oldLine: 4, newLine: 4 },
+        { kind: "delete", text: "oldValue();", oldLine: 5, newLine: 5 },
+        { kind: "add", text: "newValue();", oldLine: 6, newLine: 5 },
+        { kind: "context", text: "after();", oldLine: 6, newLine: 6 }
+      ]
+    }]);
+  });
 });

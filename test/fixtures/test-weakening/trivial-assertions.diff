@@ -1,0 +1,18 @@
+diff --git a/billing/always.test.ts b/billing/always.test.ts
+new file mode 100644
+--- /dev/null
++++ b/billing/always.test.ts
+@@ -0,0 +1,4 @@
++expect(true).toBe(true);
++expect(1).toBe(1);
++expect(false).toBe(false);
++expect(true).toBeTruthy();
+diff --git a/test_always.py b/test_always.py
+new file mode 100644
+--- /dev/null
++++ b/test_always.py
+@@ -0,0 +1,4 @@
++def test_always():
++    assert True
++    assert 1 == 1
++    assert not False
