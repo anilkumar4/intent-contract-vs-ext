@@ -5,6 +5,7 @@ import { detectScope } from "./scope";
 import { detectSymbolScope } from "./symbolScope";
 import { detectTautologicalTests } from "./tautologicalTests";
 import { detectTestWeakening } from "./testWeakening";
+import { detectArchitectureDrift } from "./architecture";
 
 export function detectFindings(diff: ParsedDiff, contract: Contract): Finding[] {
   return [
@@ -17,4 +18,19 @@ export function detectFindings(diff: ParsedDiff, contract: Contract): Finding[] 
       ...detectTautologicalTests(diff.changes)
     ] : [])
   ].sort((a, b) => a.file.localeCompare(b.file) || a.detector.localeCompare(b.detector) || a.id.localeCompare(b.id));
+}
+
+export async function detectFindingsForWorkspace(
+  root: string,
+  policyTree: string,
+  diff: ParsedDiff,
+  contract: Contract,
+  contractFile?: string
+): Promise<Finding[]> {
+  const findings = [
+    ...detectFindings(diff, contract),
+    ...await detectArchitectureDrift(root, policyTree, diff, contract, contractFile)
+  ];
+  return [...new Map(findings.map((finding) => [finding.id, finding])).values()]
+    .sort((a, b) => a.file.localeCompare(b.file) || a.detector.localeCompare(b.detector) || a.id.localeCompare(b.id));
 }

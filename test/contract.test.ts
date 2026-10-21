@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadContract } from "../src/contract/loader";
+import { loadContract, parseContract } from "../src/contract/loader";
 import { createDefaultContract } from "../src/contract/template";
 
 const temporaryDirectories: string[] = [];
@@ -29,6 +29,44 @@ describe("contract loading", () => {
     const filePath = path.join(root, "invalid.yaml");
     await fs.writeFile(filePath, "intent: Missing name\nscope:\n  modify: []\n");
     await expect(loadContract(filePath)).rejects.toThrow(/Invalid contract.*name/);
+  });
+
+  it("loads the optional architecture policy and rejects unsupported policy names", () => {
+    const contract = parseContract([
+      "name: architecture",
+      "intent: Keep module dependencies explicit",
+      "scope:",
+      "  modify: [src/**]",
+      "architecture:",
+      "  diagram: docs/system.mmd",
+      "  node_mappings:",
+      "    Billing: [src/billing/**]",
+      "  default_policy: deny_unlisted_edges",
+      "forbid: [architecture_drift]"
+    ].join("\n"));
+    expect(contract.architecture).toEqual({
+      diagram: "docs/system.mmd",
+      node_mappings: { Billing: ["src/billing/**"] },
+      default_policy: "deny_unlisted_edges"
+    });
+    expect(contract.forbid).toContain("architecture_drift");
+    expect(() => parseContract([
+      "name: architecture",
+      "intent: Validate policy",
+      "scope:",
+      "  modify: [src/**]",
+      "architecture:",
+      "  diagram: docs/system.mmd",
+      "  node_mappings: {}",
+      "  default_policy: allow_everything"
+    ].join("\n"))).toThrow(/default_policy/);
+    expect(() => parseContract([
+      "name: architecture",
+      "intent: Require a diagram policy",
+      "scope:",
+      "  modify: [src/**]",
+      "forbid: [architecture_drift]"
+    ].join("\n"))).toThrow(/architecture is required/);
   });
 
   it("creates the default contract and ignores generated session metadata", async () => {

@@ -10,13 +10,22 @@ intent: Fix proration rounding in billing
 scope:
   modify: ["billing/**"]
   read_only: ["shared/**"]
+architecture:
+  diagram: "docs/system.mmd"
+  node_mappings:
+    Billing: ["billing/**"]
+    Shared: ["shared/**"]
+  default_policy: "deny_unlisted_edges"
 forbid:
   - new_dependencies
   - high_risk_files
+  - architecture_drift
 allow_exceptions: true
 ```
 
 Contracts are validated when loaded. Read-only paths are errors; other paths outside `scope.modify` are warnings. Phase 1 detects dependency additions or version changes and edits to high-risk CI, environment, Docker, Terraform, agent configuration, and lock files.
+
+When architecture_drift is enabled, directed arrows define permitted module dependencies. The diagram is read from the policy baseline so a code change cannot approve itself by adding an arrow at the same time. Mermaid flowcharts are supported in .mmd files and fenced blocks in Markdown; use README.md#architecture to select a heading section. Draw.io .drawio, .dio, and .drawio.svg files are also supported. JavaScript and TypeScript imports, re-exports, dynamic imports, and require() calls are parsed and resolved with TypeScript module-resolution settings. Unmapped or unresolved internal paths produce warnings.
 
 ## Run the extension
 
@@ -30,6 +39,7 @@ The extension host must support the VS Code `extensionHost` debug configuration.
 
 ## Commands and baseline
 
+- **Configure AI Agents & MCP** adds the local stdio MCP server and agent instructions to selected Cursor, Antigravity, Claude Code, GitHub Copilot, and Git pre-commit configurations. Existing MCP servers and instruction text are preserved.
 - **Start Contract** captures the current working tree, including uncommitted and untracked files, using a temporary Git index. The actual index is left untouched.
 - **Re-check Now** compares the current tree with that snapshot. File-system changes and editor saves also trigger a check after about 800 ms.
 - **Revert File to Baseline** restores one changed file or removes one file that was added after the baseline.
@@ -39,10 +49,22 @@ The extension host must support the VS Code `extensionHost` debug configuration.
 
 The Explorer view groups findings by file, provides diff/revert/waive actions, and keeps waived findings in a separate group. Diagnostics appear at a changed line when available or at the start of a file for file-level findings.
 
+## CLI and MCP
+
+The build produces dist/cli.js and dist/mcp-server.js alongside the VS Code extension bundle. The CLI does not require an active extension session when a Git base and contract are supplied. Run from the repository root:
+
+    node dist/cli.js check --base origin/main --contract .intent/default.yaml --format github
+    node dist/cli.js start default
+    node dist/cli.js check
+    node dist/cli.js revert src/example.ts
+    node dist/cli.js stop
+
+The check command returns exit code 1 when unwaived error findings exist. Formats are text, json, and GitHub Actions annotations. The MCP server uses JSON-RPC over stdio and exposes get_active_contract, verify_intent_contract, revert_out_of_scope_files, and start_intent_contract.
+
 ## Development checks
 
 - `npm test` runs contract, detector, diff parsing, and Git snapshot/revert tests.
 - `npm run test:smoke` runs a minimal VS Code extension-host startup test. It uses an installed `code` executable when available; otherwise `@vscode/test-electron` downloads VS Code.
 - `npm run build` type-checks, bundles with esbuild, and packages `intent-contract.vsix`.
 
-Test weakening, mutation checks, natural-language contract drafting, and symbol-level scope are reserved for later phases.
+Test weakening, tautological-test detection, and symbol-level scope are included in the detector pipeline.

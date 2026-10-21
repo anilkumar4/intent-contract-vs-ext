@@ -4,7 +4,7 @@ import fs from "node:fs/promises";
 import { createDefaultContract, ensureIntentMetadataIgnored } from "./contract/template";
 import { discoverContracts, loadContract, parseContract } from "./contract/loader";
 import type { Contract } from "./contract/schema";
-import { detectFindings } from "./detectors";
+import { detectFindingsForWorkspace } from "./detectors";
 import type { FileChange, Finding } from "./detectors/types";
 import { diffTrees } from "./git/diff";
 import { captureBaseline, createWorkingTreeSnapshot, releaseBaseline } from "./git/snapshot";
@@ -18,6 +18,7 @@ import { FindingDiagnostics } from "./ui/diagnostics";
 import { ContractStatusBar } from "./ui/statusBar";
 import { FindingsTreeProvider } from "./ui/treeView";
 import { toRepoPath } from "./util/paths";
+import { configureAgentIntegrations, type AgentIntegration } from "./config/agentConfig";
 
 let output: vscode.OutputChannel;
 let root: string | undefined;
@@ -64,6 +65,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("intentContract.recheck", () => runCheck()),
     vscode.commands.registerCommand("intentContract.createTemplate", () => createTemplate()),
     vscode.commands.registerCommand("intentContract.copyViolations", () => copyFindingsForAgent(actionContext)),
+    vscode.commands.registerCommand("intentContract.configureAgents", () => configureAgents(context)),
     vscode.commands.registerCommand("intentContract.openDiff", async (value?: unknown) => openFindingDiff(unwrapFinding(value) ?? await chooseCurrentFinding(), actionContext)),
     vscode.commands.registerCommand("intentContract.revertFile", async (value?: unknown) => revertFindingFile(unwrapFinding(value) ?? await chooseCurrentFinding(), actionContext)),
     vscode.commands.registerCommand("intentContract.waiveFinding", (value?: unknown) => waiveFinding(unwrapFinding(value), actionContext)),
@@ -187,6 +189,34 @@ async function createTemplate(): Promise<void> {
   }
 }
 
+async function configureAgents(context: vscode.ExtensionContext): Promise<void> {
+  const repoRoot = await workspaceRepositoryRoot();
+  if (!repoRoot) return;
+  const items: Array<vscode.QuickPickItem & { integration: AgentIntegration }> = [
+    { label: "Cursor", description: ".cursor/mcp.json + .cursor/rules/intent-contract.mdc", picked: true, integration: "cursor" },
+    { label: "Google Antigravity", description: ".agents/mcp_config.json + .agents/rules/intent-contract.md", picked: true, integration: "antigravity" },
+    { label: "Claude Code", description: ".mcp.json + CLAUDE.md section", picked: true, integration: "claude" },
+    { label: "GitHub Copilot", description: ".mcp.json + .github/copilot-instructions.md", picked: true, integration: "copilot" },
+    { label: "Git Pre-Commit Hook", description: ".git/hooks/pre-commit", picked: true, integration: "precommit" }
+  ];
+  const selected = await vscode.window.showQuickPick(items, {
+    canPickMany: true,
+    placeHolder: "Choose the AI agents and Git hook to configure",
+    ignoreFocusOut: true
+  });
+  if (!selected?.length) return;
+  try {
+    const configured = await configureAgentIntegrations(
+      repoRoot,
+      context.extensionPath,
+      selected.map((item) => item.integration)
+    );
+    void vscode.window.showInformationMessage("Configured " + configured.join(", ") + ".");
+  } catch (error) {
+    void vscode.window.showErrorMessage("Could not configure AI agents: " + errorMessage(error));
+  }
+}
+
 async function runCheck(): Promise<void> {
   checkQueued = true;
   if (checkRunning) return;
@@ -210,7 +240,7 @@ async function performCheck(): Promise<void> {
   try {
     const currentTreeHash = await createWorkingTreeSnapshot(root);
     const diff = await diffTrees(root, session.baselineTreeHash, currentTreeHash);
-    const nextFindings = detectFindings(diff, contract);
+    const nextFindings = await detectFindingsForWorkspace(root, session.baselineTreeHash, diff, contract, session.activeContract);
     const nextWaivers = await readWaivers(root);
     const active = nextFindings.filter((finding) => !nextWaivers.has(finding.id));
     changes = diff.changes;

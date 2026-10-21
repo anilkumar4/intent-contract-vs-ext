@@ -1,4 +1,4 @@
-export type DetectorId = "scope" | "symbol_scope" | "dependencies" | "high_risk_files" | "test_weakening" | "tautological_tests";
+export type DetectorId = "scope" | "symbol_scope" | "dependencies" | "high_risk_files" | "test_weakening" | "tautological_tests" | "architecture_drift";
 export type Severity = "error" | "warning";
 export type ChangeStatus = "A" | "M" | "D" | "R" | "C" | "T" | "U";
 
@@ -22,7 +22,12 @@ export interface Contract {
     read_only: string[];
     modify_symbols?: string[];
   };
-  forbid: Array<"new_dependencies" | "test_weakening" | "high_risk_files">;
+  architecture?: {
+    diagram: string;
+    node_mappings: Record<string, string[]>;
+    default_policy: "deny_unlisted_edges";
+  };
+  forbid: Array<"new_dependencies" | "test_weakening" | "high_risk_files" | "architecture_drift">;
   allow_exceptions: boolean;
 }
 

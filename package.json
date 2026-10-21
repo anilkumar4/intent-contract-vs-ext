@@ -18,9 +18,13 @@
     "onCommand:intentContract.createTemplate",
     "onCommand:intentContract.copyViolations",
     "onCommand:intentContract.revertFile",
-    "onCommand:intentContract.waiveFinding"
+    "onCommand:intentContract.waiveFinding",
+    "onCommand:intentContract.configureAgents"
   ],
   "main": "./dist/extension.js",
+  "bin": {
+    "intent-contract": "./dist/cli.js"
+  },
   "contributes": {
     "commands": [
       { "command": "intentContract.start", "title": "Intent Contract: Start Contract" },
@@ -30,6 +34,7 @@
       { "command": "intentContract.copyViolations", "title": "Intent Contract: Copy Violations For Agent" },
       { "command": "intentContract.revertFile", "title": "Intent Contract: Revert File to Baseline" },
       { "command": "intentContract.waiveFinding", "title": "Intent Contract: Waive Finding" },
+      { "command": "intentContract.configureAgents", "title": "Intent Contract: Configure AI Agents & MCP" },
       { "command": "intentContract.openDiff", "title": "Intent Contract: Open Diff vs Baseline" }
     ],
     "views": {
