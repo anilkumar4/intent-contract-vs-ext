@@ -25,7 +25,7 @@ allow_exceptions: true
 
 Contracts are validated when loaded. Read-only paths are errors; other paths outside `scope.modify` are warnings. Phase 1 detects dependency additions or version changes and edits to high-risk CI, environment, Docker, Terraform, agent configuration, and lock files.
 
-When architecture_drift is enabled, directed arrows define permitted module dependencies. The diagram is read from the policy baseline so a code change cannot approve itself by adding an arrow at the same time. Mermaid flowcharts and C4 blocks are supported in .mmd files and fenced blocks in Markdown; use README.md#architecture to select a heading section. Draw.io .drawio, .dio, and .drawio.svg files are also supported. JavaScript and TypeScript imports, Python imports, and Go module imports are checked in modified or added files, including existing imports in those changed files. Unmapped or unresolved internal paths produce warnings.
+When architecture_drift is enabled, directed arrows define permitted module dependencies. The contract and diagram are read from the policy baseline so a code change cannot approve itself by changing its rules or adding an arrow. Mermaid flowcharts and C4 blocks are supported in .mmd files and fenced blocks in Markdown; use README.md#architecture to select a heading section. Draw.io .drawio, .dio, and .drawio.svg files are also supported. JavaScript and TypeScript imports, Python imports, and Go module imports are checked in modified, added, or renamed files, including existing imports in those changed files. Unmapped or unresolved internal paths produce warnings.
 
 ## Run the extension
 
@@ -60,7 +60,7 @@ The build produces dist/cli.js and dist/mcp-server.js alongside the VS Code exte
     node dist/cli.js revert src/example.ts
     node dist/cli.js stop
 
-The check command returns exit code 1 when unwaived error findings exist. Formats are text, json, and GitHub Actions annotations. The MCP server uses JSON-RPC over stdio and exposes get_active_contract, verify_intent_contract, revert_out_of_scope_files, and start_intent_contract.
+The CLI reads the contract from the same policy tree it checks: the selected `--base`, the active session baseline, or `HEAD`. The contract path must exist in that tree. This keeps a change from weakening its own policy during a check. The check command returns exit code 1 when unwaived error findings exist. Formats are text, json, and GitHub Actions annotations. The MCP server uses JSON-RPC over stdio and exposes get_active_contract, verify_intent_contract, revert_out_of_scope_files, and start_intent_contract.
 
 ## Development checks
 

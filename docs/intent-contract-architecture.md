@@ -49,12 +49,12 @@ allow_exceptions: false
 
 The architecture block is optional. When architecture_drift is listed in forbid, the schema requires an architecture block. Node mappings associate a diagram node ID or visible label with repository globs. Inline glob tags such as [src/billing/**] in a diagram node label are also accepted and merged with contract mappings. A path matching multiple nodes is ambiguous and produces a warning.
 
-The contract and diagram are read from the policy baseline during verification. Changing a diagram arrow in the same working-tree change therefore cannot authorize a new dependency in that same check. To adopt a revised policy, update the diagram and start a new contract baseline.
+The contract and diagram are read from the policy baseline during verification. The CLI reads the contract from the same tree used for the check: the explicit `--base`, the active session baseline, or `HEAD`. The contract path must exist in that tree. Changing the contract mappings, forbid list, or diagram in the same working-tree change therefore cannot authorize a new dependency in that check. To adopt a revised policy, update the policy files and select a new baseline.
 
 ## Baseline and verification flow
 
 1. **Start:** the extension, CLI, or MCP calls the shared runtime. The runtime validates the selected contract, prepares ignored .intent metadata, and captures the repository state using a temporary Git index. The real Git staging index remains untouched.
-2. **Change detection:** the extension checks after editor saves and file-system events, or the CLI/MCP checks on demand. Git comparison identifies modified and added files and retains their current content and line hunks.
+2. **Change detection:** the extension checks after editor saves and file-system events, or the CLI/MCP checks on demand. Git comparison identifies modified, added, deleted, and renamed files and retains their current content and line hunks.
 3. **Contract evaluation:** the detector pipeline runs the relevant detectors. Architecture checking runs only when the active contract includes architecture_drift.
 4. **Reporting:** findings are deduplicated and sorted. The extension updates diagnostics, the tree, status bar, and .intent/.violations.md; the CLI returns its selected output format and exit code; MCP returns structured findings and remediation instructions.
 5. **Restore or waive:** a restore action reads the captured baseline. A waiver requires an explanation and is available only when the contract allows exceptions.
@@ -77,18 +77,18 @@ Markdown references can select Mermaid fences in a file or a single section, for
 
 ### Draw.io
 
-Draw.io .drawio and .dio files are read as XML. Vertex cells contribute IDs and labels; HTML formatting is removed while text and bracketed glob tags are retained. Edges use source and target attributes. Explicitly bidirectional arrow styles create reciprocal policy edges; a line styled without either arrow is skipped. Compressed Draw.io page payloads are inflated with Node's built-in zlib support. Draw.io SVG files can contain XML in an SVG content attribute or encoded XML.
+Draw.io .drawio and .dio files are read as XML. Vertex cells contribute IDs and labels; HTML formatting is removed while text and bracketed glob tags are retained. Edges use source and target attributes. Explicitly disabled arrows are ignored, start arrows reverse the source and target direction, and two active arrows create reciprocal policy edges. Compressed Draw.io page payloads are inflated with Node's built-in zlib support and capped at five MiB after expansion. Draw.io SVG files can contain XML in an SVG content attribute or encoded XML.
 
 XML DTD and entity declarations are rejected. Diagram input is limited to five MiB by the detector. Unsupported formats, malformed files, and empty graphs become warning findings so users can repair the policy input.
 
 ## Import resolution and drift findings
 
-Only modified or added source files are checked. For each import in those files, the detector maps the importer to one diagram node, resolves the target file, maps it to another node, and checks the directed edge. Existing imports in a modified file are checked too; enforcement is not limited to newly added import lines.
+Modified, added, and renamed source files are checked. Renames are evaluated at their new repository path so moving a file between mapped modules re-evaluates its ownership. For each import in those files, the detector maps the importer to one diagram node, resolves the target file, maps it to another node, and checks the directed edge. Existing imports in a modified file are checked too; enforcement is not limited to newly added import lines.
 
 | Language | Import forms | Resolution |
 | --- | --- | --- |
 | JavaScript / TypeScript | Static imports, re-exports, require, dynamic import, and import-equals | TypeScript module resolution, including relative files and tsconfig paths aliases such as @/*. |
-| Python | import, from ... import ..., and relative imports | Dotted module paths map to .py modules and package __init__.py files in the repository. |
+| Python | import, from ... import ..., parenthesized multiline imports, and relative imports | Dotted module paths and imported submodules map to .py modules and package __init__.py files in the repository; package symbols fall back to their containing module. |
 | Go | Single and grouped import declarations | Imports under the repository go.mod module path map to source files in the imported package directory. |
 
 External packages are ignored by architecture boundaries. If an import is likely internal but cannot resolve, or its importer or target has no unique node mapping, the detector emits a warning rather than inventing an edge. An internal cross-node import with no directed edge emits an error at the import line. The message names both nodes and files, the policy diagram, and the source node's allowed outgoing dependencies.

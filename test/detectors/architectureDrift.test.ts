@@ -67,6 +67,25 @@ describe("architecture drift detector", () => {
     expect(findings.some((finding) => finding.rule === "unlisted_edge" && finding.line === 1)).toBe(true);
   });
 
+  it("checks imports when a source file is renamed into a different architecture node", async () => {
+    const { root } = await createRepository(
+      "flowchart LR\nBilling --> Inventory\nBilling --> Shared\nInventory --> Shared\n"
+    );
+    await fs.writeFile(path.join(root, "src/billing/invoice.ts"), 'import "../inventory/stockRepository";\n');
+    git(root, ["add", "src/billing/invoice.ts"]);
+    git(root, ["commit", "-m", "add allowed billing dependency"]);
+    const renamePolicy = git(root, ["rev-parse", "HEAD^{tree}"]).trim();
+    await fs.mkdir(path.join(root, "src/shared"), { recursive: true });
+    await fs.rename(path.join(root, "src/billing/invoice.ts"), path.join(root, "src/shared/invoice.ts"));
+
+    const diff = await currentDiff(root, renamePolicy);
+    expect(diff.changes[0]?.status).toBe("R");
+    const findings = await detectArchitectureDrift(root, renamePolicy, diff, contract);
+    expect(findings).toContainEqual(expect.objectContaining({
+      detector: "architecture_drift", severity: "error", file: "src/shared/invoice.ts", line: 1
+    }));
+  });
+
   it("resolves tsconfig paths aliases to repository modules", async () => {
     const { root, policyTree } = await createRepository();
     await fs.writeFile(path.join(root, "tsconfig.json"), JSON.stringify({
@@ -86,12 +105,41 @@ describe("architecture drift detector", () => {
 
   it("resolves Python package imports to diagram nodes", async () => {
     const { root, policyTree } = await createRepository();
-    await fs.writeFile(path.join(root, "src/billing/invoice.py"), "from ..inventory import stockRepository\n");
+    await fs.writeFile(path.join(root, "src/billing/invoice.py"), [
+      "from ..inventory import (",
+      "    stockRepository as repository,",
+      ")"
+    ].join("\n") + "\n");
     await fs.writeFile(path.join(root, "src/inventory/stockRepository.py"), "stock = 1\n");
     const findings = await detectArchitectureDrift(root, policyTree, await currentDiff(root, policyTree), contract);
     expect(findings).toContainEqual(expect.objectContaining({
       detector: "architecture_drift", severity: "error", file: "src/billing/invoice.py", line: 1
     }));
+  });
+
+  it("resolves the imported Python submodule rather than an arbitrary package file", async () => {
+    const { root, policyTree } = await createRepository(
+      "flowchart LR\nBilling --> Shared\nInventory --> Shared\nStock --> Shared\n"
+    );
+    await fs.writeFile(path.join(root, "src/inventory/aaa.py"), "other = 1\n");
+    await fs.writeFile(path.join(root, "src/inventory/stockRepository.py"), "stock = 1\n");
+    await fs.writeFile(path.join(root, "src/billing/invoice.py"), "from ..inventory import stockRepository\n");
+    const splitModuleContract: Contract = {
+      ...contract,
+      architecture: {
+        ...contract.architecture!,
+        node_mappings: {
+          Billing: ["src/billing/**"],
+          Inventory: ["src/inventory/aaa.py"],
+          Stock: ["src/inventory/stockRepository.py"],
+          Shared: ["src/shared/**"]
+        }
+      }
+    };
+    const findings = await detectArchitectureDrift(
+      root, policyTree, await currentDiff(root, policyTree), splitModuleContract
+    );
+    expect(findings.find((finding) => finding.rule === "unlisted_edge")?.message).toContain("Stock");
   });
 
   it("resolves Go module imports to diagram nodes", async () => {
@@ -127,7 +175,7 @@ const contract: Contract = {
   allow_exceptions: false
 };
 
-async function createRepository(): Promise<{ root: string; policyTree: string }> {
+async function createRepository(diagram = "flowchart LR\nBilling --> Shared\nInventory --> Shared\n"): Promise<{ root: string; policyTree: string }> {
   vi.spyOn(os, "tmpdir").mockReturnValue(process.cwd());
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "intent-architecture-test-"));
   repositories.push(root);
@@ -137,7 +185,7 @@ async function createRepository(): Promise<{ root: string; policyTree: string }>
   for (const directory of ["docs", "src/billing", "src/inventory", "src/shared"]) {
     await fs.mkdir(path.join(root, directory), { recursive: true });
   }
-  await fs.writeFile(path.join(root, "docs/system.mmd"), "flowchart LR\nBilling --> Shared\nInventory --> Shared\n");
+  await fs.writeFile(path.join(root, "docs/system.mmd"), diagram);
   await fs.writeFile(path.join(root, "tsconfig.json"), '{"compilerOptions":{"module":"commonjs","moduleResolution":"node"}}\n');
   await fs.writeFile(path.join(root, "src/billing/invoice.ts"), "export const invoice = 1;\n");
   await fs.writeFile(path.join(root, "src/inventory/stockRepository.ts"), "export const stock = 1;\n");

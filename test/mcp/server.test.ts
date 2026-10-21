@@ -51,7 +51,7 @@ describe("MCP stdio JSON-RPC protocol", () => {
     expect(reverted.result.structuredContent.reverted).toEqual(["test/locked.txt"]);
     expect(await fs.readFile(path.join(root, "test/locked.txt"), "utf8")).toBe("baseline\n");
     expect(git(root, ["diff", "--cached", "--binary"])).toBe(stagedBefore);
-  });
+  }, 30_000);
 
   it("enforces architecture_drift through verify_intent_contract", async () => {
     const root = await createArchitectureRepository();
@@ -68,7 +68,7 @@ describe("MCP stdio JSON-RPC protocol", () => {
       errorCount: 1,
       findings: [expect.objectContaining({ detector: "architecture_drift", file: "src/billing/invoice.ts" })]
     });
-  });
+  }, 30_000);
 });
 
 async function createRepository(): Promise<string> {

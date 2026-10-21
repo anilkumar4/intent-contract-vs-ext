@@ -56,6 +56,20 @@ describe("headless CLI", () => {
       errorCount: 1,
       findings: [expect.objectContaining({ detector: "architecture_drift", file: "src/billing/invoice.ts" })]
     });
+
+    await fs.writeFile(path.join(root, ".intent/architecture.yaml"),
+      (await fs.readFile(path.join(root, ".intent/architecture.yaml"), "utf8"))
+        .replace("forbid: [architecture_drift]", "forbid: []"));
+    output.length = 0;
+    const policyLocked = await runCli([
+      "check", "--base", "HEAD", "--contract", ".intent/architecture.yaml", "--format", "json"
+    ], root);
+    expect(policyLocked).toBe(1);
+    const lockedResult = JSON.parse(output.join("")) as { passed: boolean; findings: Array<{ detector: string; file: string }> };
+    expect(lockedResult.passed).toBe(false);
+    expect(lockedResult.findings).toContainEqual(expect.objectContaining({
+      detector: "architecture_drift", file: "src/billing/invoice.ts"
+    }));
   });
 });
 

@@ -13,7 +13,7 @@ const MAX_DIAGRAM_BYTES = 5 * 1024 * 1024;
 const JS_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"]);
 const SOURCE_EXTENSIONS = new Set([...JS_EXTENSIONS, ".py", ".go"]);
 
-interface ImportRef { specifier: string; line: number }
+interface ImportRef { specifier: string; line: number; fallbackSpecifier?: string }
 interface Mapping { nodeId: string; patterns: string[] }
 export interface ArchitectureViolation {
   sourceNode: string; targetNode: string; sourceFile: string; targetFile: string; line: number;
@@ -62,7 +62,7 @@ export async function analyzeArchitectureDrift(
   const goModule = await loadGoModule(root);
 
   for (const change of diff.changes) {
-    if (change.status !== "M" && change.status !== "A") continue;
+    if (change.status !== "M" && change.status !== "A" && change.status !== "R") continue;
     const sourcePath = change.newFile ?? change.file;
     const extension = path.extname(sourcePath).toLowerCase();
     if (change.afterContent === undefined || !SOURCE_EXTENSIONS.has(extension)) continue;
@@ -76,7 +76,7 @@ export async function analyzeArchitectureDrift(
       const resolved = JS_EXTENSIONS.has(extension)
         ? await resolveJs(root, sourcePath, imported.specifier, compilerOptions, typescript)
         : extension === ".py"
-          ? await resolvePython(root, sourcePath, imported.specifier)
+          ? await resolvePython(root, sourcePath, imported.specifier, imported.fallbackSpecifier)
           : await resolveGo(root, sourcePath, imported.specifier, goModule);
       if (resolved.issue) {
         if (!warningMessages.has(resolved.issue)) {
@@ -184,24 +184,78 @@ function collectJsImports(file: string, content: string, tsApi: typeof import("t
 
 function collectPythonImports(content: string): ImportRef[] {
   const imports: ImportRef[] = [];
-  for (const [index, raw] of content.split(/\r?\n/).entries()) {
-    const line = raw.replace(/\s+#.*$/, "").trim();
-    const from = /^from\s+([.\w]*)\s+import\s+(.+)$/.exec(line);
-    if (from) {
-      if (from[1]) imports.push({ specifier: from[1], line: index + 1 });
-      else for (const name of from[2].replace(/^\(|\)$/g, "").split(",")) {
-        const module = name.trim().split(/\s+as\s+/i)[0];
-        if (module && module !== "*") imports.push({ specifier: "." + module, line: index + 1 });
+  let statement = "";
+  let statementLine = 1;
+  let parenthesisDepth = 0;
+  const flush = (): void => {
+    for (const line of statement.split(";")) {
+      const from = /^from\s+([.\w]+)\s+import\s+(.+)$/.exec(line.trim());
+      if (from) {
+        const importedNames = from[2].replace(/[()]/g, "").split(",");
+        for (const entry of importedNames) {
+          const name = entry.trim().split(/\s+as\s+/i)[0];
+          if (!name) continue;
+          if (name === "*") {
+            imports.push({ specifier: from[1], line: statementLine });
+            continue;
+          }
+          const specifier = from[1].endsWith(".") ? from[1] + name : from[1] + "." + name;
+          imports.push({ specifier, fallbackSpecifier: from[1], line: statementLine });
+        }
+        continue;
       }
-      continue;
+      const match = /^import\s+(.+)$/.exec(line.trim());
+      if (match) for (const entry of match[1].split(",")) {
+        const module = entry.trim().split(/\s+as\s+/i)[0];
+        if (module) imports.push({ specifier: module, line: statementLine });
+      }
     }
-    const match = /^import\s+(.+)$/.exec(line);
-    if (match) for (const name of match[1].split(",")) {
-      const module = name.trim().split(/\s+as\s+/i)[0];
-      if (module) imports.push({ specifier: module, line: index + 1 });
+    statement = "";
+    parenthesisDepth = 0;
+  };
+
+  for (const [index, raw] of content.split(/\r?\n/).entries()) {
+    let line = raw.split("#", 1)[0].trim();
+    if (!line && !statement) continue;
+    if (!statement) statementLine = index + 1;
+    const explicitContinuation = /\\\s*$/.test(line);
+    if (explicitContinuation) line = line.replace(/\\\s*$/, "");
+    statement += (statement ? " " : "") + line;
+    for (const character of line) {
+      if (character === "(") parenthesisDepth += 1;
+      else if (character === ")") parenthesisDepth = Math.max(0, parenthesisDepth - 1);
     }
+    if (!explicitContinuation && parenthesisDepth === 0) flush();
   }
+  if (statement) flush();
   return imports;
+}
+
+async function resolvePython(root: string, sourcePath: string, specifier: string, fallbackSpecifier?: string):
+Promise<{ targetPath?: string; internal: boolean; issue?: string }> {
+  const relative = specifier.startsWith(".");
+  let base: string;
+  if (relative) {
+    const level = specifier.match(/^\.+/)?.[0].length ?? 1;
+    base = path.dirname(path.resolve(root, sourcePath));
+    for (let index = 1; index < level; index += 1) base = path.dirname(base);
+    base = path.resolve(base, specifier.slice(level).replace(/\./g, path.sep));
+  } else {
+    base = path.resolve(root, specifier.replace(/\./g, path.sep));
+  }
+  for (const candidate of [base + ".py", path.join(base, "__init__.py")]) {
+    if (await isFile(candidate)) return { targetPath: toRepoPath(path.relative(root, candidate)), internal: true };
+  }
+  if (await isDirectory(base)) {
+    const file = (await fs.readdir(base).catch(() => [])).filter((name) => name.endsWith(".py")).sort()[0];
+    if (file) return { targetPath: toRepoPath(path.relative(root, path.join(base, file))), internal: true };
+  }
+  if (fallbackSpecifier && fallbackSpecifier !== specifier) {
+    const fallback = await resolvePython(root, sourcePath, fallbackSpecifier);
+    if (fallback.internal || fallback.issue) return fallback;
+  }
+  if (relative) return { internal: true, issue: "Could not resolve internal Python import " + specifier + " from " + sourcePath + "." };
+  return { internal: false };
 }
 
 function collectGoImports(content: string): ImportRef[] {
@@ -241,28 +295,6 @@ Promise<{ targetPath?: string; internal: boolean; issue?: string }> {
     : { internal: false };
 }
 
-async function resolvePython(root: string, sourcePath: string, specifier: string):
-Promise<{ targetPath?: string; internal: boolean; issue?: string }> {
-  const relative = specifier.startsWith(".");
-  let base: string;
-  if (relative) {
-    const level = specifier.match(/^\.+/)?.[0].length ?? 1;
-    base = path.dirname(path.resolve(root, sourcePath));
-    for (let index = 1; index < level; index += 1) base = path.dirname(base);
-    base = path.resolve(base, specifier.slice(level).replace(/\./g, path.sep));
-  } else {
-    base = path.resolve(root, specifier.replace(/\./g, path.sep));
-  }
-  for (const candidate of [base + ".py", path.join(base, "__init__.py")]) {
-    if (await isFile(candidate)) return { targetPath: toRepoPath(path.relative(root, candidate)), internal: true };
-  }
-  if (await isDirectory(base)) {
-    const file = (await fs.readdir(base).catch(() => [])).filter((name) => name.endsWith(".py")).sort()[0];
-    if (file) return { targetPath: toRepoPath(path.relative(root, path.join(base, file))), internal: true };
-  }
-  if (relative) return { internal: true, issue: "Could not resolve internal Python import " + specifier + " from " + sourcePath + "." };
-  return { internal: false };
-}
 
 async function resolveGo(root: string, sourcePath: string, specifier: string, module: string | undefined):
 Promise<{ targetPath?: string; internal: boolean; issue?: string }> {

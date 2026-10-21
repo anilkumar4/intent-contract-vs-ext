@@ -60,6 +60,18 @@ describe("normalized architecture diagram parser", () => {
     expect(graph.allowedEdges).toEqual(new Set(["billing->shared"]));
   });
 
+  it("ignores connectors with explicitly disabled arrows and preserves arrow direction", () => {
+    const xml = '<mxGraphModel><root>' +
+      '<mxCell id="billing" value="Billing" vertex="1"/>' +
+      '<mxCell id="shared" value="Shared" vertex="1"/>' +
+      '<mxCell id="stock" value="Stock" vertex="1"/>' +
+      '<mxCell id="plain" edge="1" source="billing" target="shared" style="endArrow=none"/>' +
+      '<mxCell id="reverse" edge="1" source="billing" target="stock" style="startArrow=classic;endArrow=none"/>' +
+      '<mxCell id="both" edge="1" source="shared" target="stock" style="startArrow=classic;endArrow=classic"/>' +
+      '</root></mxGraphModel>';
+    expect(parseDrawio(xml).allowedEdges).toEqual(new Set(["stock->billing", "shared->stock", "stock->shared"]));
+  });
+
   it("retains compressed Draw.io pages and reads embedded XML from Draw.io SVG", () => {
     const xml = '<mxGraphModel><root><mxCell id="n" value="Node" vertex="1"/></root></mxGraphModel>';
     const packed = deflateRawSync(Buffer.from(encodeURIComponent(xml))).toString("base64");
@@ -68,6 +80,12 @@ describe("normalized architecture diagram parser", () => {
       "&lt;mxCell id=&quot;svg-node&quot; value=&quot;SVG Node&quot; vertex=&quot;1&quot;/&gt;" +
       "&lt;/root&gt;&lt;/mxGraphModel&gt;&lt;/diagram&gt;&lt;/mxfile&gt;";
     expect(parseArchitectureDiagram("docs/architecture.drawio.svg", '<svg content="' + encoded + '"></svg>').nodes.has("svg-node")).toBe(true);
+  });
+
+  it("rejects compressed Draw.io pages that expand beyond the parser limit", () => {
+    const xml = "<mxGraphModel><root>" + " ".repeat(2 * 1024 * 1024) + "</root></mxGraphModel>";
+    const packed = deflateRawSync(Buffer.from(encodeURIComponent(xml))).toString("base64");
+    expect(() => parseDrawio('<mxfile><diagram>' + packed + '</diagram></mxfile>')).toThrow(/decompress/);
   });
 
   it("rejects DTD and external entity declarations", () => {

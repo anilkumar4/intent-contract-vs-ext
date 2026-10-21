@@ -11,7 +11,7 @@ import { revertFileToBaseline } from "../git/revert";
 import { readSession, removeSession, writeSession, type ContractSession } from "../state/session";
 import { readWaivers } from "../state/waivers";
 import { formatFindingsForAgent } from "../state/formatViolations";
-import { resolveRepoFile, toRepoPath } from "../util/paths";
+import { toRepoPath } from "../util/paths";
 
 export interface ContractSummary {
   path: string;
@@ -44,18 +44,6 @@ export async function verifyIntentContract(
   options: { base?: string; contractPath?: string } = {}
 ): Promise<VerificationResult> {
   const session = await readSession(root);
-  let contract: Contract;
-  let contractFile: string;
-  if (options.contractPath) {
-    contractFile = normalizeContractPath(options.contractPath, root);
-    contract = await loadContract(resolveRepoFile(root, contractFile));
-  } else {
-    if (!session) throw new Error("No active contract. Start one or pass --contract <path>.");
-    const active = await getActiveContract(root);
-    contract = active.contract;
-    contractFile = active.path;
-  }
-
   let policyTree: string;
   if (options.base) {
     policyTree = (await gitText(root, ["rev-parse", "--verify", options.base + "^{tree}"])).trim();
@@ -64,6 +52,14 @@ export async function verifyIntentContract(
   } else {
     policyTree = (await gitText(root, ["rev-parse", "--verify", "HEAD^{tree}"])).trim();
   }
+
+  const contractFile = options.contractPath
+    ? normalizeContractPath(options.contractPath, root)
+    : session?.activeContract;
+  if (!contractFile) throw new Error("No active contract. Start one or pass --contract <path>.");
+  const contractYaml = (await gitBuffer(root, ["cat-file", "blob", policyTree + ":" + contractFile])).toString("utf8");
+  const contract = parseContract(contractYaml, contractFile);
+
   const currentTree = await createWorkingTreeSnapshot(root);
   const diff = await diffTrees(root, policyTree, currentTree);
   const allFindings = await detectFindingsForWorkspace(root, policyTree, diff, contract, contractFile);

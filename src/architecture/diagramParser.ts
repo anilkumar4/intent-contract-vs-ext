@@ -1,5 +1,7 @@
 import { inflateRawSync } from "node:zlib";
 
+const MAX_EXPANDED_DIAGRAM_BYTES = 5 * 1024 * 1024;
+
 export interface ArchitectureNode {
   id: string;
   label: string;
@@ -181,12 +183,15 @@ export function parseDrawio(source: string): ArchitectureGraph {
         const style = attrs.style ?? "";
         const startArrow = /(?:^|;)startArrow=([^;]*)/i.exec(style)?.[1]?.toLowerCase();
         const endArrow = /(?:^|;)endArrow=([^;]*)/i.exec(style)?.[1]?.toLowerCase();
-        if (startArrow === "none" && endArrow === "none") continue;
-        if (startArrow && startArrow !== "none" && (!endArrow || endArrow === "none")) {
+        const hasExplicitArrowStyle = /(?:^|;)(?:startArrow|endArrow)=/i.test(style);
+        const hasStartArrow = Boolean(startArrow && startArrow !== "none");
+        const hasEndArrow = Boolean(endArrow && endArrow !== "none");
+        if (hasExplicitArrowStyle && !hasStartArrow && !hasEndArrow) continue;
+        if (hasStartArrow && !hasEndArrow) {
           addEdge(graph, attrs.target, attrs.source);
         } else {
           addEdge(graph, attrs.source, attrs.target);
-          if (startArrow && startArrow !== "none" && endArrow && endArrow !== "none") {
+          if (hasStartArrow && hasEndArrow) {
             addEdge(graph, attrs.target, attrs.source);
           }
         }
@@ -390,15 +395,23 @@ function hasCompressedDiagram(source: string): boolean {
 }
 
 function expandCompressedDiagrams(source: string): string {
+  let expandedBytes = Buffer.byteLength(source, "utf8");
   return source.replace(/(<diagram\b[^>]*>)([\s\S]*?)(<\/diagram\s*>)/gi, (whole, open: string, body: string, close: string) => {
     const content = body.trim();
     if (!content || /<(?:mxGraphModel|mxfile)\b/i.test(content)) return whole;
-    return open + inflateDrawioPayload(content) + close;
+    const replacement = open + inflateDrawioPayload(content) + close;
+    expandedBytes += Buffer.byteLength(replacement, "utf8") - Buffer.byteLength(whole, "utf8");
+    if (expandedBytes > MAX_EXPANDED_DIAGRAM_BYTES) {
+      throw new Error("expanded diagram exceeds 5 MiB");
+    }
+    return replacement;
   });
 }
 
 function inflateDrawioPayload(payload: string): string {
-  const inflated = inflateRawSync(Buffer.from(payload.replace(/\s+/g, ""), "base64")).toString("utf8");
+  const inflated = inflateRawSync(Buffer.from(payload.replace(/\s+/g, ""), "base64"), {
+    maxOutputLength: MAX_EXPANDED_DIAGRAM_BYTES
+  }).toString("utf8");
   return decodeURIComponent(inflated);
 }
 
