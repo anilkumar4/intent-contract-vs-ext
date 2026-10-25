@@ -83,9 +83,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("intentContract.openDiff", async (value?: unknown) => openFindingDiff(unwrapFinding(value) ?? await chooseCurrentFinding(), actionContext)),
     vscode.commands.registerCommand("intentContract.revertFile", async (value?: unknown) => revertFindingFile(unwrapFinding(value) ?? await chooseCurrentFinding(), actionContext)),
     vscode.commands.registerCommand("intentContract.waiveFinding", (value?: unknown) => waiveFinding(unwrapFinding(value), actionContext)),
-    vscode.commands.registerCommand("intentContract.statusClick", () => {
+    vscode.commands.registerCommand("intentContract.statusClick", async () => {
       if (!session) return vscode.commands.executeCommand("intentContract.start");
-      return vscode.commands.executeCommand("workbench.views.service.focus.intentContractFindings");
+      try {
+        return await vscode.commands.executeCommand("intentContractFindings.focus");
+      } catch {
+        return await vscode.commands.executeCommand("workbench.view.explorer");
+      }
     })
   );
 
@@ -246,10 +250,28 @@ async function runCheck(): Promise<void> {
 }
 
 async function performCheck(): Promise<void> {
-  if (!root || !session || !contract) {
+  if (!root) {
     treeProvider?.setState(false, [], new Map());
     statusBar?.update(undefined, []);
     return;
+  }
+  const savedSession = await readSession(root);
+  if (!savedSession) {
+    if (session) {
+      session = undefined;
+      contract = undefined;
+      changes = [];
+      findings = [];
+      waivers = new Map();
+      diagnostics.update(undefined, []);
+      treeProvider?.setState(false, [], new Map());
+      statusBar?.update(undefined, []);
+    }
+    return;
+  }
+  if (!session || !contract || session.baselineTreeHash !== savedSession.baselineTreeHash || session.activeContract !== savedSession.activeContract) {
+    session = savedSession;
+    contract = await loadContractFromBaseline(root, savedSession);
   }
   try {
     const currentTreeHash = await createWorkingTreeSnapshot(root);
@@ -357,7 +379,7 @@ function isIgnored(uri: vscode.Uri): boolean {
   if (!root || uri.scheme !== "file") return true;
   const relative = path.relative(root, uri.fsPath).replace(/\\/g, "/");
   if (!relative || relative === ".." || relative.startsWith("../") || path.isAbsolute(relative)) return true;
-  return relative === ".intent/.state.json" || relative === ".intent/.violations.md" || relative === ".intent/waivers.json" ||
+  return relative === ".intent/.violations.md" ||
     relative.split("/").some((part) => part === ".git" || part === "node_modules");
 }
 

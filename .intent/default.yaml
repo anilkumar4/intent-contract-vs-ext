@@ -1,0 +1,10 @@
+
+name: default
+intent: Describe the change this task is meant to make
+scope:
+  modify:
+    - "src/**"
+forbid:
+  - new_dependencies
+  - high_risk_files
+allow_exceptions: true

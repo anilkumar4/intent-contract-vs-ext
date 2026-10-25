@@ -102,6 +102,7 @@ export async function startIntentContract(root: string, name: string): Promise<C
   const snapshot = await captureBaseline(root);
   const session: ContractSession = { ...snapshot, activeContract: relative };
   await writeSession(root, session);
+  await unlinkIfPresent(path.join(root, ".intent", ".violations.md"));
   const baselineYaml = (await gitBuffer(root, ["cat-file", "blob", snapshot.baselineTreeHash + ":" + relative])).toString("utf8");
   return { path: relative, yaml: baselineYaml, contract: parseContract(baselineYaml, relative), session };
 }

@@ -3,28 +3,19 @@
   "displayName": "Intent Contract",
   "description": "Detects changes that violate a local AI task contract.",
   "version": "0.1.0",
-  "publisher": "intent-contract",
+  "publisher": "anilkumar4",
   "repository": {
     "type": "git",
     "url": "https://github.com/anilkumar4/intent-contract-vs-ext.git"
   },
   "license": "MIT",
+  "icon": "icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": ["Other"],
   "activationEvents": [
-    "onStartupFinished",
-    "onView:intentContractFindings",
-    "onCommand:intentContract.start",
-    "onCommand:intentContract.stop",
-    "onCommand:intentContract.recheck",
-    "onCommand:intentContract.createTemplate",
-    "onCommand:intentContract.copyViolations",
-    "onCommand:intentContract.revertFile",
-    "onCommand:intentContract.waiveFinding",
-    "onCommand:intentContract.configureAgents",
-    "onCommand:intentContract.exportArchitectureDrift"
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "bin": {
@@ -45,7 +36,12 @@
     ],
     "views": {
       "explorer": [
-        { "id": "intentContractFindings", "name": "Intent Contract Findings", "when": "workspaceFolderCount > 0" }
+        {
+          "id": "intentContractFindings",
+          "name": "Intent Contract Findings",
+          "icon": "icon.png",
+          "when": "workspaceFolderCount > 0"
+        }
       ]
     },
     "menus": {

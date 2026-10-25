@@ -5,3 +5,4 @@ dist/*.map
 !package.json
 !README.md
 !LICENSE
+!icon.png
