@@ -1,54 +1,295 @@
-<mxfile host="app.diagrams.net" modified="2026-10-21T00:00:00.000Z" agent="Intent Contract" version="24.7.17" type="device">
-  <diagram id="intent-contract-architecture" name="Project Architecture">
-    <mxGraphModel dx="1900" dy="1150" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="1150" math="0" shadow="0">
+<mxfile host="app.diagrams.net" modified="2026-10-28T11:00:00.000Z" agent="Intent Contract" version="24.7.17" type="device">
+  <diagram id="intent-contract-architecture" name="Intent Contract Architecture">
+    <mxGraphModel dx="2000" dy="1100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1900" pageHeight="880" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
-        <mxCell id="actor" value="&lt;b&gt;Developer / AI agent&lt;/b&gt;&lt;br&gt;Edits files; runs commands or MCP tools" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1f5fe;strokeColor=#0288d1;fontSize=14;" vertex="1" parent="1"><mxGeometry x="40" y="50" width="240" height="90" as="geometry"/></mxCell>
-        <mxCell id="contract" value="&lt;b&gt;Intent contract&lt;/b&gt;&lt;br&gt;.intent/*.yaml&lt;br&gt;scope, forbid rules, architecture policy" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#fb8c00;fontSize=14;" vertex="1" parent="1"><mxGeometry x="360" y="45" width="260" height="100" as="geometry"/></mxCell>
-        <mxCell id="diagram" value="&lt;b&gt;Architecture diagram&lt;/b&gt;&lt;br&gt;.mmd / Markdown / Draw.io&lt;br&gt;nodes, labels, inline globs, directed edges" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#fb8c00;fontSize=14;" vertex="1" parent="1"><mxGeometry x="360" y="190" width="260" height="100" as="geometry"/></mxCell>
-        <mxCell id="repo" value="&lt;b&gt;Git repository&lt;/b&gt;&lt;br&gt;working tree + staged and untracked files&lt;br&gt;source files and project configuration" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceff1;strokeColor=#546e7a;fontSize=14;" vertex="1" parent="1"><mxGeometry x="40" y="350" width="240" height="120" as="geometry"/></mxCell>
 
-        <mxCell id="extension" value="&lt;b&gt;VS Code extension&lt;/b&gt;&lt;br&gt;commands + filesystem watcher&lt;br&gt;start / re-check / stop / export diagram" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8eaf6;strokeColor=#3949ab;fontSize=14;" vertex="1" parent="1"><mxGeometry x="700" y="40" width="300" height="110" as="geometry"/></mxCell>
-        <mxCell id="cli" value="&lt;b&gt;CLI&lt;/b&gt;&lt;br&gt;start / check / revert / stop&lt;br&gt;text, JSON, GitHub annotations" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8eaf6;strokeColor=#3949ab;fontSize=14;" vertex="1" parent="1"><mxGeometry x="40" y="620" width="250" height="105" as="geometry"/></mxCell>
-        <mxCell id="mcp" value="&lt;b&gt;MCP stdio server&lt;/b&gt;&lt;br&gt;get active contract&lt;br&gt;verify / revert / start tools" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8eaf6;strokeColor=#3949ab;fontSize=14;" vertex="1" parent="1"><mxGeometry x="360" y="620" width="250" height="105" as="geometry"/></mxCell>
+        <!-- ==================== COLUMN 1: CLIENTS & DEVELOPER ACCESS ==================== -->
+        <mxCell id="col1" value="CLIENTS &amp; DEVELOPER ACCESS" style="swimlane;startSize=30;rounded=1;arcSize=6;strokeColor=#4F46E5;fillColor=#EEF2FF;fontStyle=1;fontSize=13;fontColor=#312E81;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="310" height="780" as="geometry"/>
+        </mxCell>
+        <mxCell id="actor" value="&lt;b&gt;Developer / AI Agent&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;Cursor, Claude Code, Copilot,&lt;br&gt;Antigravity, CLI, or human dev&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#3B82F6;strokeWidth=2;fontSize=12;fontColor=#1E3A8A;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="65" y="80" width="260" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="extension" value="&lt;b&gt;VS Code / Cursor Extension&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• Real-time editor diagnostics&lt;br&gt;• Explorer tree (active &amp;amp; waived)&lt;br&gt;• Diff viewer, status bar, actions&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#4F46E5;strokeWidth=1.5;fontSize=12;fontColor=#1E1B4B;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="65" y="180" width="260" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="cli" value="&lt;b&gt;Headless CLI (intent-contract)&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• start, check, revert, stop&lt;br&gt;• Exit 0 (passed) / Exit 1 (errors)&lt;br&gt;• text, json, GitHub annotations&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#4F46E5;strokeWidth=1.5;fontSize=12;fontColor=#1E1B4B;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="65" y="300" width="260" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="mcp" value="&lt;b&gt;MCP stdio Server&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• JSON-RPC 2.0 over stdio&lt;br&gt;• verify_intent_contract&lt;br&gt;• revert_out_of_scope_files&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#4F46E5;strokeWidth=1.5;fontSize=12;fontColor=#1E1B4B;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="65" y="420" width="260" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="hooks" value="&lt;b&gt;Git Hooks Engine&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• pre-commit hook (blocks commit)&lt;br&gt;• pre-push hook (blocks git push)&lt;br&gt;• Node/Electron fallback launcher&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#4F46E5;strokeWidth=1.5;fontSize=12;fontColor=#1E1B4B;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="65" y="540" width="260" height="90" as="geometry"/>
+        </mxCell>
 
-        <mxCell id="runtime" value="&lt;b&gt;Shared contract runtime&lt;/b&gt;&lt;br&gt;load and validate contract&lt;br&gt;baseline lifecycle + workspace verification&lt;br&gt;waivers + remediation summary" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2f1;strokeColor=#00897b;fontSize=14;" vertex="1" parent="1"><mxGeometry x="700" y="250" width="310" height="140" as="geometry"/></mxCell>
-        <mxCell id="git" value="&lt;b&gt;Git baseline and diff&lt;/b&gt;&lt;br&gt;temporary index snapshot&lt;br&gt;baseline tree + file contents&lt;br&gt;M/A changes and line hunks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eceff1;strokeColor=#546e7a;fontSize=14;" vertex="1" parent="1"><mxGeometry x="700" y="465" width="310" height="130" as="geometry"/></mxCell>
-        <mxCell id="pipeline" value="&lt;b&gt;Detector pipeline&lt;/b&gt;&lt;br&gt;one shared implementation for extension, CLI, MCP&lt;br&gt;stable findings + severity + source line" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2f1;strokeColor=#00897b;fontSize=14;" vertex="1" parent="1"><mxGeometry x="1100" y="250" width="330" height="120" as="geometry"/></mxCell>
+        <!-- ==================== COLUMN 2: CORE RUNTIME & POLICY INPUTS ==================== -->
+        <mxCell id="col2" value="SHARED RUNTIME &amp;amp; GIT REPOSITORY" style="swimlane;startSize=30;rounded=1;arcSize=6;strokeColor=#059669;fillColor=#ECFDF5;fontStyle=1;fontSize=13;fontColor=#064E3B;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="390" y="40" width="330" height="780" as="geometry"/>
+        </mxCell>
+        <mxCell id="contract" value="&lt;b&gt;Contract Policy&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;.intent/*.yaml&lt;br&gt;scope, forbid, high_risk&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFBEB;strokeColor=#D97706;strokeWidth=1.5;fontSize=11;fontColor=#78350F;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="410" y="80" width="135" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="waivers" value="&lt;b&gt;Tamper Waivers&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;.intent/waivers.json&lt;br&gt;Evidence hash &amp;amp; audit&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFBEB;strokeColor=#D97706;strokeWidth=1.5;fontSize=11;fontColor=#78350F;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="565" y="80" width="135" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="runtime" value="&lt;b&gt;Shared Verification Runtime&lt;/b&gt;&lt;br&gt;&lt;font color='#047857'&gt;src/runtime/contracts.ts&lt;/font&gt;&lt;br&gt;&lt;font color='#374151'&gt;• Active Contract Loader (Strict Zod)&lt;br&gt;• Session Coordinator &amp;amp; .state.json&lt;br&gt;• Anti-Laundering Tree Hash Guard&lt;br&gt;• Waiver Suppression Evaluation&lt;br&gt;• Markdown Remediation Summary&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#059669;strokeWidth=2;fontSize=11;fontColor=#064E3B;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="410" y="210" width="290" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="git" value="&lt;b&gt;Git Baseline &amp;amp; Virtual Index&lt;/b&gt;&lt;br&gt;&lt;font color='#047857'&gt;src/git/snapshot.ts &amp;amp; diff.ts&lt;/font&gt;&lt;br&gt;&lt;font color='#374151'&gt;• Isolated index via GIT_INDEX_FILE&lt;br&gt;• refs/intent/baselines/... tree ref&lt;br&gt;• Unified diff &amp;amp; hunk extraction&lt;br&gt;• Parallelized git cat-file reading&lt;br&gt;• Byte-exact file restoration&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#059669;strokeWidth=2;fontSize=11;fontColor=#064E3B;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="410" y="400" width="290" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="repo" value="&lt;b&gt;Working Repository Tree&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;Local workspace tree + staged and untracked files&lt;br&gt;Force-tracks gitignored secrets (.env, tfvars)&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#F8FAFC;strokeColor=#64748B;strokeWidth=1.5;fontSize=11;fontColor=#1E293B;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="410" y="590" width="290" height="85" as="geometry"/>
+        </mxCell>
 
-        <mxCell id="scope" value="&lt;b&gt;Scope + symbols&lt;/b&gt;&lt;br&gt;modify / read_only globs&lt;br&gt;allowed symbol edits" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e5f5;strokeColor=#8e24aa;" vertex="1" parent="1"><mxGeometry x="1080" y="440" width="190" height="95" as="geometry"/></mxCell>
-        <mxCell id="dependency" value="&lt;b&gt;Dependency + risk&lt;/b&gt;&lt;br&gt;dependency changes&lt;br&gt;high-risk files" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e5f5;strokeColor=#8e24aa;" vertex="1" parent="1"><mxGeometry x="1300" y="440" width="190" height="95" as="geometry"/></mxCell>
-        <mxCell id="tests" value="&lt;b&gt;Test integrity&lt;/b&gt;&lt;br&gt;test weakening&lt;br&gt;tautological tests" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e5f5;strokeColor=#8e24aa;" vertex="1" parent="1"><mxGeometry x="1080" y="590" width="190" height="95" as="geometry"/></mxCell>
-        <mxCell id="drift" value="&lt;b&gt;Architecture drift detector&lt;/b&gt;&lt;br&gt;resolve JS/TS, Python, Go imports&lt;br&gt;compare source and target nodes&lt;br&gt;reject undrawn directed edges" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffebee;strokeColor=#e53935;fontSize=13;" vertex="1" parent="1"><mxGeometry x="1300" y="580" width="260" height="125" as="geometry"/></mxCell>
-        <mxCell id="parser" value="&lt;b&gt;Zero-dependency diagram parser&lt;/b&gt;&lt;br&gt;Mermaid flowchart + C4 + Markdown fences&lt;br&gt;Draw.io XML / SVG payload&lt;br&gt;node map + directed-edge set" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#fb8c00;fontSize=13;" vertex="1" parent="1"><mxGeometry x="1300" y="760" width="260" height="120" as="geometry"/></mxCell>
+        <!-- ==================== COLUMN 3: ANALYSIS & COORDINATION ==================== -->
+        <mxCell id="col3" value="COORDINATION &amp;amp; PARSER" style="swimlane;startSize=30;rounded=1;arcSize=6;strokeColor=#7C3AED;fillColor=#FAF5FF;fontStyle=1;fontSize=13;fontColor=#4C1D95;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="760" y="40" width="310" height="780" as="geometry"/>
+        </mxCell>
+        <mxCell id="diagram" value="&lt;b&gt;Architecture Diagram&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;.mmd / .drawio / Markdown #anchors&lt;br&gt;Directed module dependencies &amp;amp; globs&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFBEB;strokeColor=#D97706;strokeWidth=1.5;fontSize=11;fontColor=#78350F;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="785" y="80" width="260" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="parser" value="&lt;b&gt;Diagram Parser&lt;/b&gt;&lt;br&gt;&lt;font color='#4C1D95'&gt;src/architecture/diagramParser.ts&lt;/font&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• Zero-dependency parsing&lt;br&gt;• Mermaid flowcharts &amp;amp; C4 models&lt;br&gt;• Draw.io XML &amp;amp; deflated SVG&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#7C3AED;strokeWidth=1.5;fontSize=11;fontColor=#4C1D95;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="785" y="210" width="260" height="90" as="geometry"/>
+        </mxCell>
+        <mxCell id="pipeline" value="&lt;b&gt;Detector Pipeline Coordinator&lt;/b&gt;&lt;br&gt;&lt;font color='#312E81'&gt;src/detectors/index.ts&lt;/font&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• One unified runner for IDE, CLI, MCP&lt;br&gt;• Orchestrates all active detectors&lt;br&gt;• Produces deterministic finding set&lt;br&gt;• High performance diff hunk dispatch&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#4F46E5;strokeWidth=2;fontSize=11;fontColor=#1E1B4B;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="785" y="360" width="260" height="150" as="geometry"/>
+        </mxCell>
 
-        <mxCell id="findings" value="&lt;b&gt;Findings&lt;/b&gt;&lt;br&gt;errors and warnings&lt;br&gt;file, line, evidence, remediation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce4ec;strokeColor=#d81b60;" vertex="1" parent="1"><mxGeometry x="1630" y="270" width="220" height="105" as="geometry"/></mxCell>
-        <mxCell id="ui" value="&lt;b&gt;Extension presentation&lt;/b&gt;&lt;br&gt;Explorer tree + diagnostics&lt;br&gt;status bar + violation summary&lt;br&gt;diff, waive, revert actions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8eaf6;strokeColor=#3949ab;" vertex="1" parent="1"><mxGeometry x="1630" y="440" width="220" height="120" as="geometry"/></mxCell>
-        <mxCell id="export" value="&lt;b&gt;Architecture drift export&lt;/b&gt;&lt;br&gt;.intent/.architecture-drift.mmd&lt;br&gt;official edges green&lt;br&gt;illegal imports dashed red&lt;br&gt;live Markdown preview" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffebee;strokeColor=#e53935;" vertex="1" parent="1"><mxGeometry x="1630" y="620" width="220" height="130" as="geometry"/></mxCell>
-        <mxCell id="outputs" value="&lt;b&gt;CLI / MCP outputs&lt;/b&gt;&lt;br&gt;exit status + JSON / CI annotations&lt;br&gt;MCP structured findings&lt;br&gt;agent remediation instructions" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8eaf6;strokeColor=#3949ab;" vertex="1" parent="1"><mxGeometry x="700" y="690" width="310" height="120" as="geometry"/></mxCell>
+        <!-- ==================== COLUMN 4: SPECIALIZED DETECTORS ==================== -->
+        <mxCell id="col4" value="SPECIALIZED DETECTORS" style="swimlane;startSize=30;rounded=1;arcSize=6;strokeColor=#A855F7;fillColor=#FAF5FF;fontStyle=1;fontSize=13;fontColor=#581C87;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="1110" y="40" width="330" height="780" as="geometry"/>
+        </mxCell>
+        <mxCell id="drift" value="&lt;b&gt;Architecture Drift Detector&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• TS AST import analysis&lt;br&gt;• Python src-layout &amp;amp; Go module imports&lt;br&gt;• JVM (Java/Kotlin) &amp;amp; C# namespaces&lt;br&gt;• Flags unapproved module dependencies&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFF1F2;strokeColor=#E11D48;strokeWidth=2;fontSize=11;fontColor=#881337;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1135" y="80" width="280" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="scope" value="&lt;b&gt;Scope &amp;amp; Symbol Scope Detector&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• Path scope: modify, read_only, !exclude&lt;br&gt;• Implicit read-only for .intent/** &amp;amp; diagrams&lt;br&gt;• TS AST Symbol Scope (functions, methods)&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A855F7;strokeWidth=1.5;fontSize=11;fontColor=#581C87;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1135" y="220" width="280" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="dependency" value="&lt;b&gt;Dependency &amp;amp; Supply-Chain Detector&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• npm/pnpm, pip, go.mod, Cargo, Maven, .NET&lt;br&gt;• beforeContent diffing (0 false positives)&lt;br&gt;• Flags pre/postinstall scripts &amp;amp; overrides&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A855F7;strokeWidth=1.5;fontSize=11;fontColor=#581C87;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1135" y="355" width="280" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="high_risk" value="&lt;b&gt;High-Risk File Detector&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• CI workflows, CODEOWNERS, pipelines&lt;br&gt;• IaC: Terraform, Docker, Kubernetes&lt;br&gt;• Agent configs: .mcp.json, CLAUDE.md&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A855F7;strokeWidth=1.5;fontSize=11;fontColor=#581C87;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1135" y="490" width="280" height="105" as="geometry"/>
+        </mxCell>
+        <mxCell id="tests" value="&lt;b&gt;Test Weakening Detector&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• Assertion deletions &amp;amp; test skips&lt;br&gt;• Matcher downgrades (toBe -&amp;gt; toBeTruthy)&lt;br&gt;• pytest tolerance inflation &amp;amp; tautologies&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#A855F7;strokeWidth=1.5;fontSize=11;fontColor=#581C87;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1135" y="625" width="280" height="105" as="geometry"/>
+        </mxCell>
 
-        <mxCell id="e1" edge="1" parent="1" source="actor" target="extension" style="endArrow=classic;html=1;rounded=1;strokeColor=#546e7a;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e2" edge="1" parent="1" source="actor" target="cli" style="endArrow=classic;html=1;rounded=1;strokeColor=#546e7a;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e3" edge="1" parent="1" source="actor" target="mcp" style="endArrow=classic;html=1;rounded=1;strokeColor=#546e7a;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e4" edge="1" parent="1" source="contract" target="runtime" style="endArrow=classic;html=1;rounded=1;strokeColor=#00897b;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e5" edge="1" parent="1" source="extension" target="runtime" style="endArrow=classic;html=1;rounded=1;strokeColor=#3949ab;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e6" edge="1" parent="1" source="cli" target="runtime" style="endArrow=classic;html=1;rounded=1;strokeColor=#3949ab;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e7" edge="1" parent="1" source="mcp" target="runtime" style="endArrow=classic;html=1;rounded=1;strokeColor=#3949ab;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e8" edge="1" parent="1" source="repo" target="git" style="endArrow=classic;html=1;rounded=1;strokeColor=#546e7a;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e9" edge="1" parent="1" source="runtime" target="git" style="endArrow=classic;html=1;rounded=1;strokeColor=#00897b;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e10" edge="1" parent="1" source="runtime" target="pipeline" style="endArrow=classic;html=1;rounded=1;strokeColor=#00897b;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e11" edge="1" parent="1" source="pipeline" target="scope" style="endArrow=classic;html=1;rounded=1;strokeColor=#8e24aa;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e12" edge="1" parent="1" source="pipeline" target="dependency" style="endArrow=classic;html=1;rounded=1;strokeColor=#8e24aa;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e13" edge="1" parent="1" source="pipeline" target="tests" style="endArrow=classic;html=1;rounded=1;strokeColor=#8e24aa;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e14" edge="1" parent="1" source="pipeline" target="drift" style="endArrow=classic;html=1;rounded=1;strokeColor=#e53935;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e15" edge="1" parent="1" source="diagram" target="parser" style="endArrow=classic;html=1;rounded=1;strokeColor=#fb8c00;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e16" edge="1" parent="1" source="parser" target="drift" style="endArrow=classic;html=1;rounded=1;strokeColor=#fb8c00;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e17" edge="1" parent="1" source="git" target="drift" style="endArrow=classic;html=1;rounded=1;strokeColor=#546e7a;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e18" edge="1" parent="1" source="drift" target="findings" style="endArrow=classic;html=1;rounded=1;strokeColor=#e53935;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e19" edge="1" parent="1" source="findings" target="ui" style="endArrow=classic;html=1;rounded=1;strokeColor=#3949ab;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e20" edge="1" parent="1" source="findings" target="outputs" style="endArrow=classic;html=1;rounded=1;strokeColor=#3949ab;"><mxGeometry relative="1" as="geometry"/></mxCell>
-        <mxCell id="e21" edge="1" parent="1" source="drift" target="export" style="endArrow=classic;html=1;rounded=1;strokeColor=#e53935;"><mxGeometry relative="1" as="geometry"/></mxCell>
+        <!-- ==================== COLUMN 5: FINDINGS & ENFORCEMENT ==================== -->
+        <mxCell id="col5" value="FINDINGS, ACTIONS &amp;amp; OUTCOMES" style="swimlane;startSize=30;rounded=1;arcSize=6;strokeColor=#F43F5E;fillColor=#FFF1F2;fontStyle=1;fontSize=13;fontColor=#881337;spacingLeft=10;" vertex="1" parent="1">
+          <mxGeometry x="1480" y="40" width="340" height="780" as="geometry"/>
+        </mxCell>
+        <mxCell id="export" value="&lt;b&gt;Live Drift Diagram Export&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;.intent/.architecture-drift.mmd&lt;br&gt;Green: approved edges; Dashed Red: violations&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFF1F2;strokeColor=#E11D48;strokeWidth=1.5;fontSize=11;fontColor=#881337;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1505" y="80" width="290" height="85" as="geometry"/>
+        </mxCell>
+        <mxCell id="findings" value="&lt;b&gt;Deterministic Findings Engine&lt;/b&gt;&lt;br&gt;&lt;font color='#881337'&gt;src/detectors/finding.ts&lt;/font&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• SHA-256 evidence hash (detector+file+rule)&lt;br&gt;• Exact source line numbers &amp;amp; diff hunks&lt;br&gt;• Stable severity: ERROR vs WARNING&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#E11D48;strokeWidth=2.5;fontSize=11;fontColor=#881337;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1505" y="200" width="290" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="ui" value="&lt;b&gt;VS Code / Cursor Integration&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• Inline squiggles &amp;amp; problem markers&lt;br&gt;• Explorer tree view &amp;amp; status bar badge&lt;br&gt;• One-click Diff, Waive, and Revert buttons&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#3B82F6;strokeWidth=1.5;fontSize=11;fontColor=#1E293B;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1505" y="350" width="290" height="85" as="geometry"/>
+        </mxCell>
+        <mxCell id="outputs" value="&lt;b&gt;CI/CD &amp;amp; Headless Outputs&lt;/b&gt;&lt;br&gt;&lt;font color='#4B5563'&gt;• Exit 0 (passed) / Exit 1 (blocking errors)&lt;br&gt;• GitHub Actions ::error annotations&lt;br&gt;• MCP structured findings &amp;amp; remediation&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#3B82F6;strokeWidth=1.5;fontSize=11;fontColor=#1E293B;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1505" y="465" width="290" height="85" as="geometry"/>
+        </mxCell>
+        <mxCell id="push_block" value="&lt;b&gt;Git Push &amp;amp; Commit Blocker&lt;/b&gt;&lt;br&gt;&lt;font color='#064E3B'&gt;• pre-push hook aborts git push on error&lt;br&gt;• pre-commit hook aborts git commit on error&lt;br&gt;• Blocks untracked drift before leaving machine&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#ECFDF5;strokeColor=#10B981;strokeWidth=2;fontSize=11;fontColor=#064E3B;align=left;spacingLeft=12;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="1505" y="580" width="290" height="85" as="geometry"/>
+        </mxCell>
+
+        <!-- ==================== CONNECTORS ==================== -->
+        <!-- Actor to Extension (straight vertical) -->
+        <mxCell id="e_act_ext" edge="1" parent="1" source="actor" target="extension" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#3B82F6;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Actor to CLI (left channel at x=52) -->
+        <mxCell id="e_act_cli" edge="1" parent="1" source="actor" target="cli" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.6;entryX=0;entryY=0.5;strokeColor=#3B82F6;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="52" y="122"/><mxPoint x="52" y="345"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Actor to MCP (left channel at x=44) -->
+        <mxCell id="e_act_mcp" edge="1" parent="1" source="actor" target="mcp" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.75;entryX=0;entryY=0.5;strokeColor=#3B82F6;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="44" y="133"/><mxPoint x="44" y="465"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Actor to Hooks (left channel at x=36) -->
+        <mxCell id="e_act_hooks" edge="1" parent="1" source="actor" target="hooks" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0;exitY=0.9;entryX=0;entryY=0.5;strokeColor=#3B82F6;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="36" y="143"/><mxPoint x="36" y="585"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Extension to Runtime (nearly direct horizontal) -->
+        <mxCell id="e_ext_rt" edge="1" parent="1" source="extension" target="runtime" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.17;strokeColor=#4F46E5;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- CLI to Runtime (channel at x=360) -->
+        <mxCell id="e_cli_rt" edge="1" parent="1" source="cli" target="runtime" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.4;strokeColor=#4F46E5;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="360" y="345"/><mxPoint x="360" y="270"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- MCP to Runtime (channel at x=372) -->
+        <mxCell id="e_mcp_rt" edge="1" parent="1" source="mcp" target="runtime" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.63;strokeColor=#4F46E5;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="372" y="465"/><mxPoint x="372" y="305"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Hooks to Runtime (channel at x=384) -->
+        <mxCell id="e_hooks_rt" edge="1" parent="1" source="hooks" target="runtime" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.87;strokeColor=#4F46E5;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="384" y="585"/><mxPoint x="384" y="340"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Contract to Runtime (straight vertical down) -->
+        <mxCell id="e_contract_rt" edge="1" parent="1" source="contract" target="runtime" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;entryX=0.23;entryY=0;strokeColor=#D97706;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Waivers to Runtime (straight vertical down) -->
+        <mxCell id="e_waivers_rt" edge="1" parent="1" source="waivers" target="runtime" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;entryX=0.77;entryY=0;strokeColor=#D97706;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Runtime to Git (straight bidirectional vertical) -->
+        <mxCell id="e_rt_git" edge="1" parent="1" source="runtime" target="git" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#059669;strokeWidth=1.5;startArrow=classic;endArrow=classic;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Repo to Git (straight vertical up) -->
+        <mxCell id="e_repo_git" edge="1" parent="1" source="repo" target="git" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;entryX=0.5;entryY=1;strokeColor=#64748B;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Runtime to Pipeline (channel at x=745) -->
+        <mxCell id="e_rt_pipeline" edge="1" parent="1" source="runtime" target="pipeline" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.33;strokeColor=#059669;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="745" y="285"/><mxPoint x="745" y="410"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Git to Pipeline (channel at x=730) -->
+        <mxCell id="e_git_pipeline" edge="1" parent="1" source="git" target="pipeline" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.67;strokeColor=#059669;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="730" y="475"/><mxPoint x="730" y="460"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Diagram to Parser (straight vertical down - REQUIRED) -->
+        <mxCell id="e_diagram_parser" edge="1" parent="1" source="diagram" target="parser" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#D97706;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Parser to Drift (channel at x=1080) -->
+        <mxCell id="e_parser_drift" edge="1" parent="1" source="parser" target="drift" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.32;strokeColor=#7C3AED;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1080" y="255"/><mxPoint x="1080" y="115"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Pipeline to Drift (channel at x=1090) -->
+        <mxCell id="e_pipe_drift" edge="1" parent="1" source="pipeline" target="drift" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.17;entryX=0;entryY=0.64;strokeColor=#4F46E5;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1090" y="385"/><mxPoint x="1090" y="150"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Pipeline to Scope (channel at x=1075) -->
+        <mxCell id="e_pipe_scope" edge="1" parent="1" source="pipeline" target="scope" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.33;entryX=0;entryY=0.5;strokeColor=#4F46E5;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1075" y="410"/><mxPoint x="1075" y="272"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Pipeline to Dependency (direct horizontal) -->
+        <mxCell id="e_pipe_dep" edge="1" parent="1" source="pipeline" target="dependency" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeColor=#4F46E5;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Pipeline to High Risk (channel at x=1075) -->
+        <mxCell id="e_pipe_risk" edge="1" parent="1" source="pipeline" target="high_risk" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.67;entryX=0;entryY=0.5;strokeColor=#4F46E5;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1075" y="460"/><mxPoint x="1075" y="542"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Pipeline to Tests (channel at x=1090) -->
+        <mxCell id="e_pipe_tests" edge="1" parent="1" source="pipeline" target="tests" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.83;entryX=0;entryY=0.5;strokeColor=#4F46E5;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1090" y="485"/><mxPoint x="1090" y="677"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Drift to Export (direct horizontal) -->
+        <mxCell id="e_drift_export" edge="1" parent="1" source="drift" target="export" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.32;entryX=0;entryY=0.5;strokeColor=#E11D48;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Drift to Findings (channel at x=1460 - REQUIRED) -->
+        <mxCell id="e_drift_findings" edge="1" parent="1" source="drift" target="findings" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.64;entryX=0;entryY=0.17;strokeColor=#E11D48;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1460" y="150"/><mxPoint x="1460" y="220"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Scope to Findings (channel at x=1475) -->
+        <mxCell id="e_scope_find" edge="1" parent="1" source="scope" target="findings" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.38;strokeColor=#A855F7;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1475" y="272"/><mxPoint x="1475" y="245"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Dependency to Findings (channel at x=1475) -->
+        <mxCell id="e_dep_find" edge="1" parent="1" source="dependency" target="findings" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.58;strokeColor=#A855F7;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1475" y="407"/><mxPoint x="1475" y="270"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- High Risk to Findings (channel at x=1460) -->
+        <mxCell id="e_risk_find" edge="1" parent="1" source="high_risk" target="findings" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.79;strokeColor=#A855F7;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1460" y="542"/><mxPoint x="1460" y="295"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Tests to Findings (channel at x=1445) -->
+        <mxCell id="e_tests_find" edge="1" parent="1" source="tests" target="findings" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.96;strokeColor=#A855F7;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1445" y="677"/><mxPoint x="1445" y="315"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Findings to UI (straight vertical down) -->
+        <mxCell id="e_find_ui" edge="1" parent="1" source="findings" target="ui" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;strokeColor=#3B82F6;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Findings to Outputs (right channel at x=1805) -->
+        <mxCell id="e_find_outputs" edge="1" parent="1" source="findings" target="outputs" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.5;entryX=1;entryY=0.5;strokeColor=#3B82F6;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1805" y="260"/><mxPoint x="1805" y="507"/></Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Findings to Push Block (right channel at x=1815) -->
+        <mxCell id="e_find_push" edge="1" parent="1" source="findings" target="push_block" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0.75;entryX=1;entryY=0.5;strokeColor=#10B981;strokeWidth=1.5;">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1815" y="290"/><mxPoint x="1815" y="622"/></Array>
+          </mxGeometry>
+        </mxCell>
+
       </root>
     </mxGraphModel>
   </diagram>
