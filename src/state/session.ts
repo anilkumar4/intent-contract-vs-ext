@@ -5,6 +5,7 @@ import type { BaselineSnapshot } from "../git/snapshot";
 export interface ContractSession extends BaselineSnapshot {
   activeContract: string;
   originalBaselineTreeHash?: string;
+  originalBaselineRef?: string;
 }
 
 export async function readSession(root: string): Promise<ContractSession | undefined> {
@@ -45,7 +46,8 @@ function isContractSession(value: unknown): value is ContractSession {
     (typeof session.headSha === "string" || session.headSha === null) &&
     typeof session.startedAt === "string" &&
     (typeof session.baselineRef === "string" || session.baselineRef === undefined) &&
-    (typeof session.originalBaselineTreeHash === "string" || session.originalBaselineTreeHash === undefined);
+    (typeof session.originalBaselineTreeHash === "string" || session.originalBaselineTreeHash === undefined) &&
+    (typeof session.originalBaselineRef === "string" || session.originalBaselineRef === undefined);
 }
 
 function isMissing(error: unknown): boolean {

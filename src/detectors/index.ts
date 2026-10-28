@@ -25,11 +25,12 @@ export async function detectFindingsForWorkspace(
   policyTree: string,
   diff: ParsedDiff,
   contract: Contract,
-  contractFile?: string
+  contractFile?: string,
+  resolutionRoot = root
 ): Promise<Finding[]> {
   const findings = [
     ...detectFindings(diff, contract),
-    ...await detectArchitectureDrift(root, policyTree, diff, contract, contractFile)
+    ...await detectArchitectureDrift(root, policyTree, diff, contract, contractFile, resolutionRoot)
   ];
   return [...new Map(findings.map((finding) => [finding.id, finding])).values()]
     .sort((a, b) => a.file.localeCompare(b.file) || a.detector.localeCompare(b.detector) || a.id.localeCompare(b.id));

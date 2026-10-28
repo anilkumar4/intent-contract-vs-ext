@@ -7,10 +7,17 @@ import { detectFindingsForWorkspace } from "../detectors";
 import type { Contract, Finding, ParsedDiff } from "../detectors/types";
 import { diffTrees } from "../git/diff";
 import { gitBuffer, gitText } from "../git/cli";
-import { captureBaseline, createWorkingTreeSnapshot, releaseBaseline } from "../git/snapshot";
+import {
+  captureBaseline,
+  createIndexCandidateTree,
+  createRevisionCandidateTree,
+  createWorkingTreeSnapshot,
+  materializeTree,
+  releaseBaseline
+} from "../git/snapshot";
 import { revertFileToBaseline } from "../git/revert";
 import { readSession, removeSession, writeSession, type ContractSession } from "../state/session";
-import { readWaivers } from "../state/waivers";
+import { readWaiversForContract } from "../state/waivers";
 import { formatFindingsForAgent } from "../state/formatViolations";
 import { writeViolationSummary } from "../state/violations";
 import { toRepoPath } from "../util/paths";
@@ -34,23 +41,29 @@ export interface VerificationResult {
 }
 
 export async function getActiveContract(root: string): Promise<ContractSummary> {
-  const session = await readSession(root);
-  if (!session) throw new Error("No active Intent Contract session was found. Start a contract first.");
+  const existing = await readSession(root);
+  if (!existing) throw new Error("No active Intent Contract session was found. Start a contract first.");
+  const session = await ensurePolicyBaselineRef(root, existing);
   const repoPath = normalizeContractPath(session.activeContract, root);
-  const yaml = (await gitBuffer(root, ["cat-file", "blob", session.baselineTreeHash + ":" + repoPath])).toString("utf8");
+  const yaml = (await gitBuffer(root, ["cat-file", "blob", policyTreeHash(session) + ":" + repoPath])).toString("utf8");
   return { path: repoPath, yaml, contract: parseContract(yaml, repoPath), session };
 }
 
 export async function verifyIntentContract(
   root: string,
-  options: { base?: string; contractPath?: string } = {}
+  options: { base?: string; contractPath?: string; index?: boolean; revision?: string } = {}
 ): Promise<VerificationResult> {
-  const session = await readSession(root);
+  if (options.index && options.revision) throw new Error("--index and --revision cannot be used together.");
+  let session = await readSession(root);
+  if (session) session = await ensurePolicyBaselineRef(root, session);
+  if ((options.index || options.revision) && !session) {
+    throw new Error("--index and --revision require an active Intent Contract session.");
+  }
   let policyTree: string;
   if (options.base) {
     policyTree = (await gitText(root, ["rev-parse", "--verify", options.base + "^{tree}"])).trim();
   } else if (session) {
-    policyTree = session.originalBaselineTreeHash ?? session.baselineTreeHash;
+    policyTree = policyTreeHash(session);
   } else {
     policyTree = (await gitText(root, ["rev-parse", "--verify", "HEAD^{tree}"])).trim();
   }
@@ -62,10 +75,25 @@ export async function verifyIntentContract(
   const contractYaml = (await gitBuffer(root, ["cat-file", "blob", policyTree + ":" + contractFile])).toString("utf8");
   const contract = parseContract(contractYaml, contractFile);
 
-  const currentTree = await createWorkingTreeSnapshot(root);
+  const currentTree = options.index
+    ? await createIndexCandidateTree(root, policyTree, session?.headSha ?? null)
+    : options.revision
+      ? await createRevisionCandidateTree(
+        root,
+        policyTree,
+        session?.headSha ?? null,
+        (await gitText(root, ["rev-parse", "--verify", "--end-of-options", options.revision + "^{commit}"])).trim()
+      )
+      : await createWorkingTreeSnapshot(root, contract.scope.read_only);
   const diff = await diffTrees(root, policyTree, currentTree);
-  const allFindings = await detectFindingsForWorkspace(root, policyTree, diff, contract, contractFile);
-  const waivers = contract.allow_exceptions ? await readWaivers(root) : new Map();
+  const candidateCheckout = options.index || options.revision ? await materializeTree(root, currentTree) : undefined;
+  let allFindings: Finding[];
+  try {
+    allFindings = await detectFindingsForWorkspace(root, policyTree, diff, contract, contractFile, candidateCheckout?.root ?? root);
+  } finally {
+    await candidateCheckout?.dispose();
+  }
+  const waivers = await readWaiversForContract(root, contract.allow_exceptions);
   const findings = allFindings.filter((finding) => !waivers.has(finding.id));
   try {
     await writeViolationSummary(root, allFindings, waivers);
@@ -129,15 +157,24 @@ export async function startIntentContract(
   }
 
   const previous = await readSession(root);
-  if (previous) await releaseBaseline(root, previous.baselineRef);
+  if (previous && !options.force) {
+    throw new Error("An Intent Contract session is already active. Use --force to replace its baseline, or stop it first.");
+  }
   await ensureIntentMetadataIgnored(root);
   const relative = toRepoPath(path.relative(root, candidates[0].file));
-  const snapshot = await captureBaseline(root);
-  const originalBaselineTreeHash = options.force
-    ? snapshot.baselineTreeHash
-    : (previous?.originalBaselineTreeHash ?? previous?.baselineTreeHash ?? snapshot.baselineTreeHash);
-  const session: ContractSession = { ...snapshot, activeContract: relative, originalBaselineTreeHash };
-  await writeSession(root, session);
+  const snapshot = await captureBaseline(root, candidates[0].contract.scope.read_only);
+  const session: ContractSession = {
+    ...snapshot,
+    activeContract: relative,
+    originalBaselineTreeHash: snapshot.baselineTreeHash
+  };
+  try {
+    await writeSession(root, session);
+  } catch (error) {
+    await releaseBaseline(root, snapshot.baselineRef);
+    throw error;
+  }
+  if (previous) await releaseSessionBaselineRefs(root, previous);
   await unlinkIfPresent(path.join(root, ".intent", ".violations.md"));
   const baselineYaml = (await gitBuffer(root, ["cat-file", "blob", snapshot.baselineTreeHash + ":" + relative])).toString("utf8");
   return { path: relative, yaml: baselineYaml, contract: parseContract(baselineYaml, relative), session };
@@ -145,17 +182,18 @@ export async function startIntentContract(
 
 export async function stopIntentContract(root: string): Promise<void> {
   const session = await readSession(root);
-  if (session) await releaseBaseline(root, session.baselineRef);
+  if (session) await releaseSessionBaselineRefs(root, session);
   await removeSession(root);
   await unlinkIfPresent(path.join(root, ".intent", ".violations.md"));
 }
 
 export async function revertOutOfScopeFiles(root: string, files?: string[]): Promise<string[]> {
-  const session = await readSession(root);
-  if (!session) throw new Error("No active Intent Contract session was found.");
+  const existing = await readSession(root);
+  if (!existing) throw new Error("No active Intent Contract session was found.");
+  const session = await ensurePolicyBaselineRef(root, existing);
   const summary = await getActiveContract(root);
-  const policyTree = session.originalBaselineTreeHash ?? session.baselineTreeHash;
-  const currentTree = await createWorkingTreeSnapshot(root);
+  const policyTree = policyTreeHash(session);
+  const currentTree = await createWorkingTreeSnapshot(root, summary.contract.scope.read_only);
   const diff = await diffTrees(root, policyTree, currentTree);
   const allFindings = await detectFindingsForWorkspace(root, policyTree, diff, summary.contract, summary.path);
   const violatingFiles = new Set(allFindings.map((finding) => finding.file));
@@ -174,11 +212,13 @@ export async function revertOutOfScopeFiles(root: string, files?: string[]): Pro
 }
 
 export async function revertIntentFile(root: string, file: string): Promise<void> {
-  const session = await readSession(root);
-  if (!session) throw new Error("No active Intent Contract session was found.");
+  const existing = await readSession(root);
+  if (!existing) throw new Error("No active Intent Contract session was found.");
+  const session = await ensurePolicyBaselineRef(root, existing);
   const repoPath = normalizeContractPath(file, root);
-  const policyTree = session.originalBaselineTreeHash ?? session.baselineTreeHash;
-  const currentTree = await createWorkingTreeSnapshot(root);
+  const policyTree = policyTreeHash(session);
+  const active = await getActiveContract(root);
+  const currentTree = await createWorkingTreeSnapshot(root, active.contract.scope.read_only);
   const diff = await diffTrees(root, policyTree, currentTree);
   const change = diff.changes.find((item) => item.file === repoPath || item.oldFile === repoPath || item.newFile === repoPath);
   if (!change) throw new Error("The file has no changes relative to the active baseline: " + repoPath);
@@ -193,6 +233,50 @@ export function normalizeContractPath(value: string, root = process.cwd()): stri
     throw new Error("Unsafe repository path: " + value);
   }
   return relative;
+}
+
+export function policyTreeHash(session: ContractSession): string {
+  return session.originalBaselineTreeHash ?? session.baselineTreeHash;
+}
+
+export async function ensurePolicyBaselineRef(root: string, session: ContractSession): Promise<ContractSession> {
+  const policyTree = policyTreeHash(session);
+  if (policyTree === session.baselineTreeHash) return session;
+  if (session.originalBaselineRef) {
+    try {
+      const pinnedTree = (await gitText(root, ["rev-parse", "--verify", `${session.originalBaselineRef}^{tree}`])).trim();
+      if (pinnedTree === policyTree) return session;
+    } catch {
+      // Recreate a missing or stale ref below if the tree itself is still available.
+    }
+  }
+
+  try {
+    await gitText(root, ["cat-file", "-e", `${policyTree}^{tree}`]);
+  } catch {
+    throw new Error(
+      `The active policy baseline ${policyTree} is no longer available in Git. Stop the session and start a new baseline with --force.`
+    );
+  }
+
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+  const originalBaselineRef = session.originalBaselineRef ?? `refs/intent-contract/baselines/policy-${suffix}`;
+  await gitText(root, ["update-ref", originalBaselineRef, policyTree]);
+  const updated = { ...session, originalBaselineRef };
+  try {
+    await writeSession(root, updated);
+  } catch (error) {
+    if (!session.originalBaselineRef) await releaseBaseline(root, originalBaselineRef);
+    throw error;
+  }
+  return updated;
+}
+
+export async function releaseSessionBaselineRefs(root: string, session: ContractSession): Promise<void> {
+  await releaseBaseline(root, session.baselineRef);
+  if (session.originalBaselineRef && session.originalBaselineRef !== session.baselineRef) {
+    await releaseBaseline(root, session.originalBaselineRef);
+  }
 }
 
 async function unlinkIfPresent(filePath: string): Promise<void> {

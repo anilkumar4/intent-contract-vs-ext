@@ -53,20 +53,45 @@ describe("tautological test detector", () => {
   });
 
   it("reports Python assertion-free tests in test files", () => {
+    const content = [
+      "def test_legacy():",
+      "    calculate_rate()",
+      "",
+      "def test_rates():",
+      "    # assert this comment is not an assertion",
+      '    note = "assert in a string"',
+      "    calculate_rate()",
+      ""
+    ].join("\n");
     const pyChange: FileChange = {
       status: "M",
       file: "tests/test_rates.py",
-      additions: [],
+      additions: content.split(/\r?\n/).slice(3).map((text, index) => ({ kind: "add", text, newLine: index + 4 })),
       deletions: [],
       binary: false,
-      afterContent: "def test_rates():\n    calculate_rate()\n"
+      afterContent: content
     };
     const findings = detectTautologicalTests([pyChange]);
     expect(findings).toContainEqual(expect.objectContaining({
       file: "tests/test_rates.py",
+      message: expect.stringContaining("test_rates"),
       detector: "tautological_tests",
       rule: "assertion_free_test"
     }));
+    expect(findings).toHaveLength(1);
+
+    const unittestTest: FileChange = {
+      status: "M",
+      file: "tests/test_unittest.py",
+      additions: [
+        { kind: "add", text: "def test_rate():", newLine: 1 },
+        { kind: "add", text: "    self.assertEqual(calculate_rate(), 1)", newLine: 2 }
+      ],
+      deletions: [],
+      binary: false,
+      afterContent: "def test_rate():\n    self.assertEqual(calculate_rate(), 1)\n"
+    };
+    expect(detectTautologicalTests([unittestTest])).toEqual([]);
   });
 });
 

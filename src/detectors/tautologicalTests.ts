@@ -23,8 +23,10 @@ export function detectTautologicalTests(changes: FileChange[]): Finding[] {
 
     const isPyTest = file.endsWith(".py") && (/(?:^|\/)tests?\//.test(file) || /(?:test_.+\.py|.+_test\.py)$/.test(file));
     if (isPyTest && change.afterContent !== undefined) {
-      const blocks = findPythonTestBlocks(change.afterContent);
+      const changedLines = new Set(change.additions.map((line) => line.newLine).filter((line): line is number => line !== undefined));
+      const blocks = findPythonTestBlocks(change.afterContent, changedLines, change.status === "A");
       for (const block of blocks) {
+        if (!block.changed) continue;
         if (!block.hasAssertion) {
           findings.push(makeFinding(
             "tautological_tests", file, "assertion_free_test", `def ${block.name}(): (contains no assertion)`, "error",
@@ -307,36 +309,104 @@ function dedupe(findings: Finding[]): Finding[] {
   return [...new Map(findings.map((finding) => [finding.id, finding])).values()];
 }
 
-function findPythonTestBlocks(content: string): Array<{ name: string; line: number; changed: boolean; hasAssertion: boolean }> {
+function findPythonTestBlocks(
+  content: string,
+  changedLines: Set<number>,
+  addedFile: boolean
+): Array<{ name: string; line: number; changed: boolean; hasAssertion: boolean }> {
   const lines = content.split(/\r?\n/);
+  const codeLines = maskPythonCommentsAndStrings(content).split(/\r?\n/);
   const blocks: Array<{ name: string; line: number; changed: boolean; hasAssertion: boolean }> = [];
-  let current: { name: string; line: number; indent: number; bodyLines: string[] } | undefined;
+  let current: { name: string; line: number; indent: number; bodyLines: string[]; changed: boolean } | undefined;
+
+  const finish = (): void => {
+    if (!current) return;
+    const hasAssertion = current.bodyLines.some((line) => /\b(?:assert|pytest\.raises)\b|\bself\.assert[A-Za-z_]*/.test(line));
+    blocks.push({ name: current.name, line: current.line, changed: current.changed, hasAssertion });
+    current = undefined;
+  };
 
   for (let index = 0; index < lines.length; index += 1) {
     const rawLine = lines[index];
-    const match = /^(\s*)(?:async\s+)?def\s+(test_[A-Za-z0-9_]*)\s*\(/.exec(rawLine);
+    const codeLine = codeLines[index] ?? "";
+    const match = /^(\s*)(?:async\s+)?def\s+(test_[A-Za-z0-9_]*)\s*\(/.exec(codeLine);
     if (match) {
-      if (current) {
-        const hasAssertion = current.bodyLines.some((l) => /\b(?:assert|pytest\.raises|self\.assert)\b/.test(l));
-        blocks.push({ name: current.name, line: current.line, changed: true, hasAssertion });
-      }
-      current = { name: match[2], line: index + 1, indent: match[1].length, bodyLines: [] };
+      finish();
+      current = {
+        name: match[2], line: index + 1, indent: match[1].length, bodyLines: [],
+        changed: addedFile || changedLines.has(index + 1)
+      };
     } else if (current) {
-      if (rawLine.trim() && !/^\s*#/.test(rawLine)) {
+      if (codeLine.trim()) {
         const currentIndent = (/^\s*/.exec(rawLine)?.[0].length ?? 0);
         if (currentIndent <= current.indent) {
-          const hasAssertion = current.bodyLines.some((l) => /\b(?:assert|pytest\.raises|self\.assert)\b/.test(l));
-          blocks.push({ name: current.name, line: current.line, changed: true, hasAssertion });
-          current = undefined;
+          finish();
         } else {
-          current.bodyLines.push(rawLine);
+          if (changedLines.has(index + 1)) current.changed = true;
+          current.bodyLines.push(codeLine);
         }
+      } else if (changedLines.has(index + 1) && (/^\s*/.exec(rawLine)?.[0].length ?? 0) > current.indent) {
+        current.changed = true;
       }
     }
   }
-  if (current) {
-    const hasAssertion = current.bodyLines.some((l) => /\b(?:assert|pytest\.raises|self\.assert)\b/.test(l));
-    blocks.push({ name: current.name, line: current.line, changed: true, hasAssertion });
-  }
+  finish();
   return blocks;
+}
+
+function maskPythonCommentsAndStrings(source: string): string {
+  const chars = source.split("");
+  let quote = "";
+  let triple = false;
+  let comment = false;
+  let escaped = false;
+
+  for (let index = 0; index < chars.length; index += 1) {
+    const character = chars[index];
+    if (comment) {
+      if (character === "\n") comment = false;
+      else chars[index] = " ";
+      continue;
+    }
+    if (quote) {
+      if (character === "\n" && !triple) {
+        quote = "";
+        escaped = false;
+        continue;
+      }
+      if (escaped) {
+        if (character !== "\n") chars[index] = " ";
+        escaped = false;
+        continue;
+      }
+      if (character === "\\") {
+        chars[index] = " ";
+        escaped = true;
+        continue;
+      }
+      if (triple && source.slice(index, index + 3) === quote.repeat(3)) {
+        chars[index] = chars[index + 1] = chars[index + 2] = " ";
+        index += 2;
+        quote = "";
+        triple = false;
+        continue;
+      }
+      chars[index] = " ";
+      if (!triple && character === quote) quote = "";
+      continue;
+    }
+    if (character === "#") {
+      chars[index] = " ";
+      comment = true;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      triple = source.slice(index, index + 3) === character.repeat(3);
+      const count = triple ? 3 : 1;
+      for (let offset = 0; offset < count; offset += 1) chars[index + offset] = " ";
+      index += count - 1;
+    }
+  }
+  return chars.join("");
 }

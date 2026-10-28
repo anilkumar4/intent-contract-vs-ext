@@ -25,7 +25,7 @@ allow_exceptions: true
 
 Contracts are validated when loaded. Read-only paths are errors; other paths outside `scope.modify` are warnings. Phase 1 detects dependency additions or version changes and edits to high-risk CI, environment, Docker, Terraform, agent configuration, and lock files.
 
-When architecture_drift is enabled, directed arrows define permitted module dependencies. The contract and diagram are read from the policy baseline so a code change cannot approve itself by changing its rules or adding an arrow. Mermaid flowcharts and C4 blocks are supported in .mmd files and fenced blocks in Markdown; use README.md#architecture to select a heading section. Draw.io .drawio, .dio, and .drawio.svg files are also supported. JavaScript and TypeScript imports, Python imports, and Go module imports are checked in modified, added, or renamed files, including existing imports in those changed files. Unmapped or unresolved internal paths produce warnings.
+When architecture_drift is enabled, directed arrows define permitted module dependencies. The contract and diagram are read from the policy baseline so a code change cannot approve itself by changing its rules or adding an arrow. Mermaid flowcharts and C4 blocks are supported in .mmd files and fenced blocks in Markdown; use README.md#architecture to select a heading section. Draw.io .drawio, .dio, and .drawio.svg files are also supported. JavaScript and TypeScript, Python, Go, Java, Kotlin, and C# imports are checked in modified, added, or renamed files, including existing imports in those changed files. Unmapped or unresolved internal paths produce warnings.
 
 ## Run the extension
 
@@ -43,6 +43,7 @@ The extension host must support the VS Code `extensionHost` debug configuration.
 - **Git Push & Commit Blocking**: Installing the Git hooks automatically verifies active contracts on `git commit` and `git push`, blocking pushes and commits whenever error findings exist until they are resolved or authorized waivers are recorded.
 - **Export Architecture Drift Diagram** writes **.intent/.architecture-drift.mmd** for the active architecture contract and opens a Mermaid Markdown preview. Official edges are green; unlisted code imports are dashed red and labeled as violations.
 - **Start Contract** captures the current working tree, including uncommitted and untracked files, using a temporary Git index. The actual index is left untouched.
+- An active session cannot be replaced accidentally. Stop it before starting another contract, or use `intent-contract start <name> --force` to capture a deliberate replacement baseline.
 - **Re-check Now** compares the current tree with that snapshot. File-system changes and editor saves also trigger a check after the configured debounce interval.
 - **Revert File to Baseline** restores one changed file or removes one file that was added after the baseline.
 - **Waive Finding** records a required reason and timestamp in `.intent/waivers.json` when the contract allows exceptions.
@@ -58,11 +59,13 @@ The build produces `dist/cli.js` and `dist/mcp-server.js` alongside the VS Code 
     node dist/cli.js check --base origin/main --contract .intent/default.yaml --format github
     node dist/cli.js start default [--force]
     node dist/cli.js check
+    node dist/cli.js check --index
+    node dist/cli.js check --revision <local-commit-sha>
     node dist/cli.js revert src/example.ts
     node dist/cli.js hook install
     node dist/cli.js stop
 
-The CLI reads the contract from the same policy tree it checks: the selected `--base`, the active session baseline, or `HEAD`. The contract path must exist in that tree. This keeps a change from weakening its own policy during a check. The check command returns exit code 1 when unwaived error findings exist. Formats are text, json, and GitHub Actions annotations. The MCP server uses JSON-RPC over stdio and exposes `get_active_contract`, `verify_intent_contract`, `revert_out_of_scope_files`, and `start_intent_contract`.
+The CLI reads the contract from the same policy tree it checks: the selected `--base`, the active session baseline, or `HEAD`. The contract path must exist in that tree. This keeps a change from weakening its own policy during a check. `check --index` verifies the staged Git index; `check --revision <sha>` verifies a local commit tree, as used by the pre-push hook. The check command returns exit code 1 when unwaived error findings exist. Formats are text, json, and GitHub Actions annotations. The MCP server uses JSON-RPC over stdio and exposes `get_active_contract`, `verify_intent_contract`, `revert_out_of_scope_files`, and `start_intent_contract`.
 
 ## Development checks
 

@@ -11,6 +11,8 @@ interface CheckOptions {
   base?: string;
   contractPath?: string;
   format: OutputFormat;
+  index?: boolean;
+  revision?: string;
 }
 
 export async function runCli(argv: string[], workingDirectory = process.cwd()): Promise<number> {
@@ -81,6 +83,8 @@ function parseCheckOptions(args: string[]): CheckOptions {
     const arg = args[index];
     if (arg === "--base") options.base = requireValue(args, ++index, "--base");
     else if (arg === "--contract") options.contractPath = requireValue(args, ++index, "--contract");
+    else if (arg === "--index") options.index = true;
+    else if (arg === "--revision") options.revision = requireValue(args, ++index, "--revision");
     else if (arg === "--format") {
       const value = requireValue(args, ++index, "--format");
       if (value !== "text" && value !== "json" && value !== "github") throw new Error("--format must be text, json, or github.");
@@ -90,6 +94,7 @@ function parseCheckOptions(args: string[]): CheckOptions {
       return options;
     } else throw new Error("Unknown check option: " + arg);
   }
+  if (options.index && options.revision) throw new Error("--index and --revision cannot be used together.");
   return options;
 }
 
@@ -140,7 +145,7 @@ function writeUsage(): void {
   process.stdout.write(
     "Intent Contract CLI\n\n" +
     "  intent-contract start <contract-name> [--force]\n" +
-    "  intent-contract check [--base <git-ref>] [--contract <path>] [--format text|json|github]\n" +
+    "  intent-contract check [--base <git-ref>] [--contract <path>] [--format text|json|github] [--index | --revision <commit>]\n" +
     "  intent-contract revert <file>\n" +
     "  intent-contract hook install\n" +
     "  intent-contract stop\n" +

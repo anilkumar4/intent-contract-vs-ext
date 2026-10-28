@@ -25,13 +25,23 @@ export interface ArchitectureAnalysis {
 }
 
 export async function detectArchitectureDrift(
-  root: string, policyTree: string, diff: ParsedDiff, contract: Contract, contractFile = ".intent/contract.yaml"
+  root: string,
+  policyTree: string,
+  diff: ParsedDiff,
+  contract: Contract,
+  contractFile = ".intent/contract.yaml",
+  resolutionRoot = root
 ): Promise<Finding[]> {
-  return (await analyzeArchitectureDrift(root, policyTree, diff, contract, contractFile)).findings;
+  return (await analyzeArchitectureDrift(root, policyTree, diff, contract, contractFile, resolutionRoot)).findings;
 }
 
 export async function analyzeArchitectureDrift(
-  root: string, policyTree: string, diff: ParsedDiff, contract: Contract, contractFile = ".intent/contract.yaml"
+  root: string,
+  policyTree: string,
+  diff: ParsedDiff,
+  contract: Contract,
+  contractFile = ".intent/contract.yaml",
+  resolutionRoot = root
 ): Promise<ArchitectureAnalysis> {
   const empty = (): ArchitectureAnalysis => ({ graph: { nodes: new Map(), allowedEdges: new Set() }, findings: [], violations: [] });
   const result = empty();
@@ -60,8 +70,8 @@ export async function analyzeArchitectureDrift(
   result.findings.push(...mappingResult.warnings.map((message) => warning(contractFile, "node_mapping", message)));
   const warningMessages = new Set(result.findings.map((finding) => finding.message));
   const typescript = await import("typescript");
-  const compilerOptions = await loadCompilerOptions(root, typescript);
-  const goModule = await loadGoModule(root);
+  const compilerOptions = await loadCompilerOptions(resolutionRoot, typescript);
+  const goModule = await loadGoModule(resolutionRoot);
 
   for (const change of diff.changes) {
     if (change.status !== "M" && change.status !== "A" && change.status !== "R") continue;
@@ -75,19 +85,19 @@ export async function analyzeArchitectureDrift(
         : extension === ".go"
           ? collectGoImports(change.afterContent)
           : JVM_EXTENSIONS.has(extension)
-            ? collectJvmImports(change.afterContent)
+            ? collectJvmImports(change.afterContent, extension)
             : collectCsharpImports(change.afterContent);
     if (!imports.length) continue;
     const sourceNode = matchNode(sourcePath, mappingResult.mappings);
 
     for (const imported of imports) {
       const resolved = JS_EXTENSIONS.has(extension)
-        ? await resolveJs(root, sourcePath, imported.specifier, compilerOptions, typescript)
+        ? await resolveJs(resolutionRoot, sourcePath, imported.specifier, compilerOptions, typescript)
         : extension === ".py"
-          ? await resolvePython(root, sourcePath, imported.specifier, imported.fallbackSpecifier)
+          ? await resolvePython(resolutionRoot, sourcePath, imported.specifier, imported.fallbackSpecifier)
           : extension === ".go"
-            ? await resolveGo(root, sourcePath, imported.specifier, goModule)
-            : await resolveJvmOrCsharp(root, sourcePath, imported.specifier);
+            ? await resolveGo(resolutionRoot, sourcePath, imported.specifier, goModule)
+            : await resolveJvmOrCsharp(resolutionRoot, sourcePath, imported.specifier);
       if (resolved.issue) {
         if (!warningMessages.has(resolved.issue)) {
           warningMessages.add(resolved.issue);
@@ -292,27 +302,32 @@ function collectGoImports(content: string): ImportRef[] {
   return imports;
 }
 
-function collectJvmImports(content: string): ImportRef[] {
+function collectJvmImports(content: string, extension: string): ImportRef[] {
   const imports: ImportRef[] = [];
-  const regex = /^\s*import\s+(?:static\s+)?([A-Za-z0-9_.]+);/gm;
+  const regex = extension === ".kt"
+    ? /^\s*import\s+([A-Za-z0-9_.*]+)(?:\s+as\s+[A-Za-z0-9_]+)?\s*;?\s*$/gm
+    : /^\s*import\s+(static\s+)?([A-Za-z0-9_.*]+);/gm;
   for (const match of content.matchAll(regex)) {
-    imports.push({ specifier: match[1], line: lineAt(content, match.index ?? 0) });
+    const isStatic = extension !== ".kt" && Boolean(match[1]);
+    const fullName = extension === ".kt" ? match[1] : match[2];
+    const specifier = isStatic ? fullName.split(".").slice(0, -1).join(".") : fullName;
+    imports.push({ specifier, line: lineAt(content, match.index ?? 0) });
   }
   return imports;
 }
 
 function collectCsharpImports(content: string): ImportRef[] {
   const imports: ImportRef[] = [];
-  const regex = /^\s*using\s+(?:static\s+)?([A-Za-z0-9_.]+);/gm;
+  const regex = /^\s*(?:global\s+)?using\s+(?:static\s+)?([A-Za-z0-9_.]+)(?:\s*=\s*([A-Za-z0-9_.]+))?\s*;/gm;
   for (const match of content.matchAll(regex)) {
-    imports.push({ specifier: match[1], line: lineAt(content, match.index ?? 0) });
+    imports.push({ specifier: match[2] ?? match[1], line: lineAt(content, match.index ?? 0) });
   }
   return imports;
 }
 
 async function resolveJvmOrCsharp(root: string, sourcePath: string, specifier: string):
 Promise<{ targetPath?: string; internal: boolean; issue?: string }> {
-  const relSpec = specifier.replace(/\./g, path.sep);
+  const relSpec = specifier.replace(/\.\*$/, "").replace(/\./g, path.sep);
   const parts = sourcePath.replace(/\\/g, "/").split("/");
   const candidateBases = [path.resolve(root, relSpec)];
   for (let i = 1; i < parts.length; i++) {
@@ -328,7 +343,19 @@ Promise<{ targetPath?: string; internal: boolean; issue?: string }> {
       if (match) return { targetPath: toRepoPath(path.relative(root, path.join(base, match))), internal: true };
     }
   }
-  return { targetPath: specifier.replace(/\./g, "/"), internal: true };
+  if (isKnownExternalNamespace(specifier, path.extname(sourcePath).toLowerCase())) return { internal: false };
+  return {
+    internal: true,
+    issue: `Could not resolve internal import ${specifier} from ${sourcePath}.`
+  };
+}
+
+function isKnownExternalNamespace(specifier: string, extension: string): boolean {
+  const lower = specifier.toLowerCase();
+  const prefixes = extension === ".cs"
+    ? ["system", "microsoft.", "xunit.", "nunit.", "newtonsoft.", "moq.", "fluentassertions.", "serilog.", "automapper.", "dapper.", "azure."]
+    : ["java.", "javax.", "jdk.", "sun.", "kotlin.", "kotlinx.", "org.junit.", "org.testng.", "org.slf4j.", "org.apache.", "org.springframework.", "org.hibernate.", "com.google.", "com.fasterxml.", "com.squareup.", "io.netty.", "io.ktor.", "android.", "androidx."];
+  return prefixes.some((prefix) => lower === prefix.replace(/\.$/, "") || lower.startsWith(prefix));
 }
 
 async function resolveJs(root: string, sourcePath: string, specifier: string, options: ts.CompilerOptions, tsApi: typeof import("typescript")):

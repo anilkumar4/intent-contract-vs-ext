@@ -1,4 +1,5 @@
 import readline from "node:readline";
+import packageManifest from "../../package.json";
 import { findRepositoryRoot } from "../git/cli";
 import {
   getActiveContract,
@@ -48,7 +49,7 @@ export async function handleRpcMessage(message: string, root: string): Promise<s
       result = {
         protocolVersion,
         capabilities: { tools: {} },
-        serverInfo: { name: "intent-contract", version: "0.1.0" }
+        serverInfo: { name: "intent-contract", version: packageManifest.version }
       };
     } else if (request.method === "ping") {
       result = {};

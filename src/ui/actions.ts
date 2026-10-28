@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { revertFileToBaseline } from "../git/revert";
 import type { FileChange, Finding } from "../detectors/types";
+import { policyTreeHash } from "../runtime/contracts";
 import type { ContractSession } from "../state/session";
 import { addWaiver, type Waiver } from "../state/waivers";
 import { formatFindingsForAgent } from "../state/formatViolations";
@@ -32,7 +33,7 @@ export async function openFindingDiff(finding: Finding | undefined, context: Act
   const baselineUri = vscode.Uri.from({
     scheme: "intent-baseline",
     path: `/${repoPath}`,
-    query: `tree=${session.baselineTreeHash}`
+    query: `tree=${policyTreeHash(session)}`
   });
   const currentPath = resolveRepoFile(root, repoPath);
   const currentUri = vscode.Uri.file(currentPath);
@@ -55,7 +56,7 @@ export async function revertFindingFile(finding: Finding | undefined, context: A
     "Restore File"
   );
   if (confirm !== "Restore File") return;
-  await revertFileToBaseline(root, session.baselineTreeHash, change);
+  await revertFileToBaseline(root, policyTreeHash(session), change);
   await context.refresh();
   void vscode.window.showInformationMessage(`Restored ${change.file} to the Intent Contract baseline.`);
 }

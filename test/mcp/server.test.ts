@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import packageManifest from "../../package.json";
 import { handleRpcMessage } from "../../src/mcp/server";
 import { startIntentContract } from "../../src/runtime/contracts";
 
@@ -77,9 +78,10 @@ describe("MCP stdio JSON-RPC protocol", () => {
       id: 20,
       method: "initialize",
       params: { protocolVersion: "2099-01-01" }
-    }), root)) ?? "{}") as { result: { protocolVersion: string } };
+    }), root)) ?? "{}") as { result: { protocolVersion: string; serverInfo: { version: string } } };
 
     expect(response.result.protocolVersion).toBe("2024-11-05");
+    expect(response.result.serverInfo.version).toBe(packageManifest.version);
   });
 
   it("guards start_intent_contract when a session is already active", async () => {

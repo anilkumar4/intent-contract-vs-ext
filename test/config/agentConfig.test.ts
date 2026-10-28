@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { installPreCommitHook, installPrePushHook, mergeMcpConfig, upsertMarkedRule } from "../../src/config/agentConfig";
+import { configureAgentIntegrations, installPreCommitHook, installPrePushHook, mergeMcpConfig, upsertMarkedRule } from "../../src/config/agentConfig";
 
 describe("AI agent configuration helpers", () => {
   it("adds Intent Contract MCP while preserving existing servers and settings", () => {
@@ -24,6 +24,20 @@ describe("AI agent configuration helpers", () => {
     expect(() => mergeMcpConfig("{ broken", { command: "node" })).toThrow(/not valid JSON/);
   });
 
+  it("writes GitHub Copilot MCP configuration to the VS Code servers file", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "intent-copilot-config-test-"));
+    try {
+      await configureAgentIntegrations(root, root, ["copilot"]);
+      const config = JSON.parse(await fs.readFile(path.join(root, ".vscode/mcp.json"), "utf8")) as {
+        servers: Record<string, unknown>;
+      };
+      expect(config.servers["intent-contract"]).toBeDefined();
+      await expect(fs.access(path.join(root, ".mcp.json"))).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it("updates its generated rule block without duplicating it", () => {
     const first = upsertMarkedRule("User instructions.\n", "Call the contract tools.");
     const second = upsertMarkedRule(first, "Call the contract tools before finishing.");
@@ -42,10 +56,12 @@ describe("AI agent configuration helpers", () => {
       const preCommit = await fs.readFile(path.join(root, ".git/hooks/pre-commit"), "utf8");
       expect(preCommit).toContain("intent_contract_status");
       expect(preCommit).toContain("Commit BLOCKED");
+      expect(preCommit).toContain("check --index");
 
       const prePush = await fs.readFile(path.join(root, ".git/hooks/pre-push"), "utf8");
       expect(prePush).toContain("intent_contract_status");
       expect(prePush).toContain("Git push BLOCKED!");
+      expect(prePush).toContain('check --revision "$local_sha"');
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

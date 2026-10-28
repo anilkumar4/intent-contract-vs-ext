@@ -156,6 +156,46 @@ describe("architecture drift detector", () => {
       detector: "architecture_drift", severity: "error", file: "src/billing/invoice.go", line: 2
     }));
   });
+
+  it("resolves Java and Kotlin imports across mapped modules and ignores standard library imports", async () => {
+    const { root, policyTree } = await createRepository();
+    await fs.writeFile(path.join(root, "src/inventory/StockRepository.java"), "package src.inventory;\nclass StockRepository {}\n");
+    await fs.writeFile(path.join(root, "src/billing/Invoice.java"), [
+      "package src.billing;",
+      "import java.util.List;",
+      "import src.inventory.StockRepository;"
+    ].join("\n") + "\n");
+    await fs.writeFile(path.join(root, "src/billing/Invoice.kt"), [
+      "package src.billing",
+      "import kotlin.collections.List",
+      "import src.inventory.StockRepository"
+    ].join("\n") + "\n");
+
+    const findings = await detectArchitectureDrift(root, policyTree, await currentDiff(root, policyTree), contract);
+    const errors = findings.filter((finding) => finding.severity === "error");
+    expect(errors).toHaveLength(2);
+    expect(errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ file: "src/billing/Invoice.java", line: 3, rule: "unlisted_edge" }),
+      expect.objectContaining({ file: "src/billing/Invoice.kt", line: 3, rule: "unlisted_edge" })
+    ]));
+    expect(findings.filter((finding) => finding.rule === "import_resolution")).toEqual([]);
+  });
+
+  it("resolves C# project imports and ignores the System namespace", async () => {
+    const { root, policyTree } = await createRepository();
+    await fs.writeFile(path.join(root, "src/inventory/StockRepository.cs"), "namespace src.inventory; public class StockRepository {}\n");
+    await fs.writeFile(path.join(root, "src/billing/Invoice.cs"), [
+      "using System;",
+      "using src.inventory;",
+      "public class Invoice {}"
+    ].join("\n") + "\n");
+
+    const findings = await detectArchitectureDrift(root, policyTree, await currentDiff(root, policyTree), contract);
+    expect(findings).toContainEqual(expect.objectContaining({
+      detector: "architecture_drift", severity: "error", file: "src/billing/Invoice.cs", line: 2
+    }));
+    expect(findings.filter((finding) => finding.rule === "import_resolution")).toEqual([]);
+  });
 });
 
 const contract: Contract = {

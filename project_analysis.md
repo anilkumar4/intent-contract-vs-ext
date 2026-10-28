@@ -58,9 +58,9 @@ flowchart LR
 
 | File | Purpose |
 |------|---------|
-| [`schema.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/contract/schema.ts) | **Zod schema** defining the contract shape: `name`, `intent`, `scope` (modify/read_only/modify_symbols), `architecture` (diagram/node_mappings/deny_unlisted_edges), `forbid` enum array, `allow_exceptions`. Custom refinement enforces that `architecture_drift` in `forbid` requires an `architecture` block. |
-| [`loader.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/contract/loader.ts) | Discovers `.intent/*.yaml` files, reads and parses YAML, validates against the Zod schema. `parseContract()` is also used to parse contracts from Git blob buffers. |
-| [`template.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/contract/template.ts) | Creates a default `default.yaml` template and ensures `.intent/.gitignore` ignores transient metadata files (`.state.json`, `.violations.md`, `waivers.json`, `.architecture-drift.mmd`). |
+| [`schema.ts`](src/contract/schema.ts) | **Zod schema** defining the contract shape: `name`, `intent`, `scope` (modify/read_only/modify_symbols), `architecture` (`diagram`, `node_mappings`, `default_policy`), `forbid` enum array, and `allow_exceptions`. Custom refinement enforces that `architecture_drift` in `forbid` requires an `architecture` block. |
+| [`loader.ts`](src/contract/loader.ts) | Discovers `.intent/*.yaml` files, reads and parses YAML, validates against the Zod schema. `parseContract()` is also used to parse contracts from Git blob buffers. |
+| [`template.ts`](src/contract/template.ts) | Creates a default `default.yaml` template and ensures `.intent/.gitignore` ignores transient metadata files (`.state.json`, `.violations.md`, `waivers.json`, `.architecture-drift.mmd`). |
 
 ### 2. Detector Pipeline — `src/detectors/`
 
@@ -68,13 +68,13 @@ The heart of the system. Seven independent detectors run in a pipeline, each ret
 
 | Detector | File | What It Catches | Severity |
 |----------|------|-----------------|----------|
-| **Scope** | [`scope.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/detectors/scope.ts) | Files outside `scope.modify` (warning) or in `scope.read_only` (error) | error/warning |
-| **Symbol Scope** | [`symbolScope.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/detectors/symbolScope.ts) | Changes to function/variable symbols *not* in `scope.modify_symbols`. Uses a lightweight JS/Python parser that masks comments/strings, then matches diff lines to symbol ranges. | error |
-| **Dependencies** | [`dependencies.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/detectors/dependencies.ts) | New dependencies or version changes in `package.json`, `pyproject.toml`, `Pipfile`, `go.mod`, `Cargo.toml`, `requirements*.txt`. Also detects unpaired lockfile changes. Full before/after manifest diffing. | error/warning |
-| **High Risk Files** | [`highRisk.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/detectors/highRisk.ts) | Changes to CI workflows, `.env`, Dockerfiles, Terraform, agent config, lockfiles | error |
-| **Test Weakening** | [`testWeakening.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/detectors/testWeakening.ts) | **The most sophisticated detector** (~900 lines). Implements a full tokenizer and assertion parser for JS/Python. Detects: deleted test files, snapshot deletions, net test block loss, net assertion loss, disabled tests (`.skip`, `.only`, `pytest.mark.skip`, etc.), trivially-true assertions, matcher downgrades (Tier 1→2→3), assertion negation flips, tolerance widening (`toBeCloseTo` precision / `pytest.approx` rel), expected value changes coinciding with implementation changes, inline snapshot changes, empty test blocks. | error/warning |
-| **Tautological Tests** | [`tautologicalTests.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/detectors/tautologicalTests.ts) | Assertion-free test blocks and self-mocking (asserting a value returned by a mock you configured in the same test) | error |
-| **Architecture Drift** | [`architectureDrift.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/detectors/architectureDrift.ts) | Import statements in changed files that violate the architecture diagram's directed dependency graph. Supports JS/TS (via TypeScript compiler API resolution), Python, and Go imports. Diagram is read from the *baseline* tree. | error/warning |
+| **Scope** | [`scope.ts`](src/detectors/scope.ts) | Files outside `scope.modify` (warning) or in `scope.read_only` (error) | error/warning |
+| **Symbol Scope** | [`symbolScope.ts`](src/detectors/symbolScope.ts) | Changes to function/variable symbols *not* in `scope.modify_symbols`. Uses a lightweight JS/Python parser that masks comments/strings, then matches diff lines to symbol ranges. | error |
+| **Dependencies** | [`dependencies.ts`](src/detectors/dependencies.ts) | New dependencies or version changes in `package.json`, `pyproject.toml`, `Pipfile`, `go.mod`, `Cargo.toml`, `requirements*.txt`. Also detects unpaired lockfile changes. Full before/after manifest diffing. | error/warning |
+| **High Risk Files** | [`highRisk.ts`](src/detectors/highRisk.ts) | Changes to CI workflows, `.env`, Dockerfiles, Terraform, agent config, lockfiles | error |
+| **Test Weakening** | [`testWeakening.ts`](src/detectors/testWeakening.ts) | **The most sophisticated detector** (~900 lines). Implements a full tokenizer and assertion parser for JS/Python. Detects: deleted test files, snapshot deletions, net test block loss, net assertion loss, disabled tests (`.skip`, `.only`, `pytest.mark.skip`, etc.), trivially-true assertions, matcher downgrades (Tier 1→2→3), assertion negation flips, tolerance widening (`toBeCloseTo` precision / `pytest.approx` rel), expected value changes coinciding with implementation changes, inline snapshot changes, empty test blocks. | error/warning |
+| **Tautological Tests** | [`tautologicalTests.ts`](src/detectors/tautologicalTests.ts) | Assertion-free test blocks and self-mocking (asserting a value returned by a mock you configured in the same test) | error |
+| **Architecture Drift** | [`architectureDrift.ts`](src/detectors/architectureDrift.ts) | Import statements in changed files that violate the architecture diagram's directed dependency graph. Supports JS/TS, Python, Go, Java, Kotlin, and C#; diagram is read from the policy baseline. | error/warning |
 
 **Finding identity**: Each finding gets a SHA-256-based `id` derived from `[detector, file, rule, evidence]`, making it deterministic and waivable.
 
@@ -93,14 +93,14 @@ Node labels can embed `[glob/patterns/**]` to auto-map architecture nodes to fil
 
 | File | Purpose |
 |------|---------|
-| [`cli.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/git/cli.ts) | Thin async wrapper over `git` CLI (`execFile`). Two variants: `gitText()` for UTF-8, `gitBuffer()` for raw buffers. 64 MiB max buffer. |
-| [`snapshot.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/git/snapshot.ts) | **Baseline capture**: copies the Git index to a temp file, runs `git add -A`, `git write-tree` to produce a tree hash — all *without* touching the real index. Creates a ref under `refs/intent-contract/baselines/` to prevent GC. |
-| [`diff.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/git/diff.ts) | Runs `git diff-tree` (name-status) + `git diff` (unified patch), parses both into `FileChange[]` with structured `DiffHunk[]`, and enriches each change with full before/after file content via `git cat-file`. |
-| [`revert.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/git/revert.ts) | Restores individual files from the baseline tree hash. Handles renames, additions (delete added file), modifications, and symlinks. **Security-hardened**: validates parent directories against symlink traversal. |
+| [`cli.ts`](src/git/cli.ts) | Thin async wrapper over `git` CLI (`execFile`). Two variants: `gitText()` for UTF-8, `gitBuffer()` for raw buffers. 64 MiB max buffer. |
+| [`snapshot.ts`](src/git/snapshot.ts) | **Baseline capture**: uses an isolated temporary index and `git write-tree` without changing the real index. Captures untracked and unstaged files, selected ignored secret/high-risk paths, and ignored paths matched by `scope.read_only`. Also builds candidate trees from the staged index or a pushed commit. Creates refs under `refs/intent-contract/baselines/` to prevent GC. |
+| [`diff.ts`](src/git/diff.ts) | Runs `git diff-tree` (name-status) + `git diff` (unified patch), parses both into `FileChange[]` with structured `DiffHunk[]`, and enriches each change with full before/after file content via `git cat-file`. |
+| [`revert.ts`](src/git/revert.ts) | Restores individual files from the baseline tree hash. Handles renames, additions (delete added file), modifications, and symlinks. **Security-hardened**: validates parent directories against symlink traversal. |
 
 ### 5. VS Code Extension — `src/extension.ts`
 
-The main entry point (403 lines). Lifecycle:
+The main entry point. Lifecycle:
 
 1. **activate()**: Registers 10 commands, tree view, content providers, file watcher, and restores any saved session.
 2. **File watcher**: Debounces FS events (create/change/delete) and editor saves with an 800ms timer → `runCheck()`.
@@ -111,26 +111,26 @@ The main entry point (403 lines). Lifecycle:
    - Reads waivers, filters active findings
    - Updates diagnostics, tree view, status bar, `.violations.md`
 4. **startContract()**: Discovers/picks a contract, captures baseline, loads contract from baseline tree, persists session.
-5. **Ignore list**: `.intent/.state.json`, `.violations.md`, `waivers.json`, `.git/`, `node_modules/`.
+5. **Metadata**: `.intent/.state.json`, `.intent/.violations.md`, `.intent/waivers.json`, and the exported drift diagram are ignored by Git metadata rules; contract files and architecture diagrams remain part of the policy tree.
 
 ### 6. UI Components — `src/ui/`
 
 | Component | File | Description |
 |-----------|------|-------------|
-| **Tree View** | [`treeView.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/ui/treeView.ts) | Explorer panel `intentContractFindings` grouping findings by file, with a separate "Waived Findings" collapsible group. Inline context menu actions for diff/revert/waive. |
-| **Diagnostics** | [`diagnostics.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/ui/diagnostics.ts) | Maps findings to VS Code diagnostic collection with error/warning severity squiggles at the relevant line. |
-| **Status Bar** | [`statusBar.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/ui/statusBar.ts) | Left-aligned item showing `$(shield) Contract: name · N violations` with error/warning background color. Click opens tree view or starts a contract. |
-| **Baseline Provider** | [`baselineContentProvider.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/ui/baselineContentProvider.ts) | `intent-baseline://` URI scheme providing baseline file content for VS Code diff views. |
-| **Actions** | [`actions.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/ui/actions.ts) | `openDiff()`, `revertFile()` (with modal confirmation), `waiveFinding()` (requires reason), `copyFindingsForAgent()`. |
+| **Tree View** | [`treeView.ts`](src/ui/treeView.ts) | Explorer panel `intentContractFindings` grouping findings by file, with a separate "Waived Findings" collapsible group. Inline context menu actions for diff/revert/waive. |
+| **Diagnostics** | [`diagnostics.ts`](src/ui/diagnostics.ts) | Maps findings to VS Code diagnostic collection with error/warning severity squiggles at the relevant line. |
+| **Status Bar** | [`statusBar.ts`](src/ui/statusBar.ts) | Left-aligned item showing `$(shield) Contract: name · N violations` with error/warning background color. Click opens tree view or starts a contract. |
+| **Baseline Provider** | [`baselineContentProvider.ts`](src/ui/baselineContentProvider.ts) | `intent-baseline://` URI scheme providing baseline file content for VS Code diff views. |
+| **Actions** | [`actions.ts`](src/ui/actions.ts) | `openDiff()`, `revertFile()` (with modal confirmation), `waiveFinding()` (requires reason), `copyFindingsForAgent()`. |
 
 ### 7. State Management — `src/state/`
 
 | File | Format | Purpose |
 |------|--------|---------|
-| [`session.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/state/session.ts) | `.intent/.state.json` | Persists `baselineTreeHash`, `headSha`, `startedAt`, `baselineRef`, `activeContract`. Survives VS Code restarts. |
-| [`waivers.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/state/waivers.ts) | `.intent/waivers.json` | Array of `{id, reason, timestamp}`. Waived findings are excluded from active counts. |
-| [`violations.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/state/violations.ts) | `.intent/.violations.md` | Refreshed on every check; markdown formatted for agent consumption. |
-| [`formatViolations.ts`](file:///c:/Users/ANIL/Downloads/Codex-Play/Intent-Contract-VS-EXT/src/state/formatViolations.ts) | — | Formats findings as structured remediation instructions with diff evidence and action items. |
+| [`session.ts`](src/state/session.ts) | `.intent/.state.json` | Persists `baselineTreeHash`, `originalBaselineTreeHash`, optional `originalBaselineRef`, `headSha`, `startedAt`, `baselineRef`, and `activeContract`. Survives VS Code restarts. |
+| [`waivers.ts`](src/state/waivers.ts) | `.intent/waivers.json` | Array of `{id, reason, timestamp}`. Waived findings are excluded from active counts. |
+| [`violations.ts`](src/state/violations.ts) | `.intent/.violations.md` | Refreshed on every check; markdown formatted for agent consumption. |
+| [`formatViolations.ts`](src/state/formatViolations.ts) | — | Formats findings as structured remediation instructions with diff evidence and action items. |
 
 ### 8. Runtime — `src/runtime/contracts.ts`
 
@@ -143,7 +143,7 @@ Headless operations shared by CLI and MCP (no VS Code dependency):
 
 ### 9. CLI — `src/cli/index.ts`
 
-Commands: `start <name>`, `check [--base --contract --format]`, `revert <file>`, `stop`.
+Commands: `start <name> [--force]`, `check [--base --contract --index --revision --format]`, `revert <file>`, `stop`. `--index` checks staged content; `--revision <sha>` checks a local commit tree. They cannot be combined and require an active session.
 - `--base origin/main` uses a Git ref as the policy tree (for CI without active sessions)
 - `--format github` outputs `::error file=...,line=...::message` annotations
 - Exit code 1 on unwaived error findings
@@ -161,15 +161,16 @@ JSON-RPC over stdio implementing MCP protocol (version `2024-11-05`). Four tools
 
 ### 11. Agent Configuration — `src/config/agentConfig.ts`
 
-One-click setup for five AI agent ecosystems:
+One-click setup for four AI agent ecosystems plus the Git hooks:
 
 | Integration | MCP Config | Rules File |
 |-------------|-----------|------------|
 | **Cursor** | `.cursor/mcp.json` | `.cursor/rules/intent-contract.mdc` |
 | **Google Antigravity** | `.agents/mcp_config.json` | `.agents/rules/intent-contract.md` |
 | **Claude Code** | `.mcp.json` | `CLAUDE.md` (appended) |
-| **GitHub Copilot** | `.mcp.json` | `.github/copilot-instructions.md` (appended) |
-| **Git pre-commit** | — | `.git/hooks/pre-commit` (shell block) |
+| **GitHub Copilot** | `.vscode/mcp.json` (`servers`) | `.github/copilot-instructions.md` (appended) |
+| **Git pre-commit** | — | `.git/hooks/pre-commit` checks `--index` (shell block) |
+| **Git pre-push** | — | `.git/hooks/pre-push` checks each pushed local SHA with `--revision` (shell block) |
 
 All merge non-destructively using `<!-- BEGIN/END INTENT CONTRACT GENERATED RULE -->` markers.
 
@@ -246,7 +247,7 @@ sequenceDiagram
 
 ## Security & Integrity Design
 
-1. **Policy immutability**: Contracts and architecture diagrams are read from the *baseline tree hash*, not the working tree. An agent cannot weaken its own rules.
+1. **Policy immutability**: Contracts and architecture diagrams are read from the effective policy tree, not the working tree. Waivers are separate mutable records and are ignored when the baseline contract sets `allow_exceptions: false`.
 2. **Path traversal protection**: `resolveRepoFile()` and `revertFileToBaseline()` reject `..` segments and absolute paths. Symlink traversal is blocked during revert.
 3. **Symlink safety**: Revert refuses to write through symlinked parent directories.
 4. **Agent config safety**: `assertRegularFileOrMissing()` refuses to overwrite symlinks when configuring agent integrations.

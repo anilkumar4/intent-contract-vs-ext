@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { readWaivers, addWaiver } from "../../src/state/waivers";
+import { readWaivers, readWaiversForContract, addWaiver } from "../../src/state/waivers";
 
 const temporaryDirectories: string[] = [];
 
@@ -51,6 +51,18 @@ describe("waivers management", () => {
 
     const waivers = await readWaivers(root);
     expect(waivers.get("test-finding-1")?.reason).toBe("Explicit user approval");
+  });
+
+  it("does not apply saved waivers when the active contract disallows exceptions", async () => {
+    const root = await createTempDir();
+    await addWaiver(root, {
+      id: "persisted-finding",
+      reason: "Previously approved",
+      timestamp: new Date().toISOString()
+    });
+
+    expect((await readWaiversForContract(root, true)).has("persisted-finding")).toBe(true);
+    expect((await readWaiversForContract(root, false)).size).toBe(0);
   });
 });
 

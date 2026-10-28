@@ -1,8 +1,9 @@
 const assert = require("node:assert/strict");
 const vscode = require("vscode");
+const manifest = require("../../package.json");
 
 exports.run = async function runSmoke() {
-  const extension = vscode.extensions.getExtension("intent-contract.intent-contract");
+  const extension = vscode.extensions.getExtension(`${manifest.publisher}.${manifest.name}`);
   assert.ok(extension, "The Intent Contract extension should be available in the extension host.");
   await extension.activate();
   const commands = await vscode.commands.getCommands(true);

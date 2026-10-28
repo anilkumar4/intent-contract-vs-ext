@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v3";
 
 export const contractSchema = z.object({
   name: z.string().trim().min(1),

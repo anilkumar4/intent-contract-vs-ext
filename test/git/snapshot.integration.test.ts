@@ -15,6 +15,31 @@ afterEach(async () => {
 });
 
 describe("temporary index baseline", () => {
+  it("captures and compares ignored files covered by read-only policy", async () => {
+    vi.spyOn(os, "tmpdir").mockReturnValue(process.cwd());
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), ".intent-contract-readonly-test-"));
+    temporaryRepositories.push(root);
+    git(root, ["init", "-q"]);
+    git(root, ["config", "user.name", "Intent Contract Test"]);
+    git(root, ["config", "user.email", "intent-test@example.invalid"]);
+    await fs.writeFile(path.join(root, ".gitignore"), "locked.txt\n");
+    await fs.writeFile(path.join(root, "locked.txt"), "baseline\n");
+    git(root, ["add", ".gitignore"]);
+    git(root, ["commit", "-m", "baseline"]);
+
+    const baseline = await createWorkingTreeSnapshot(root, ["locked.txt"]);
+    await fs.writeFile(path.join(root, "locked.txt"), "changed\n");
+    const current = await createWorkingTreeSnapshot(root, ["locked.txt"]);
+    const diff = await diffTrees(root, baseline, current);
+
+    expect(diff.changes).toContainEqual(expect.objectContaining({ file: "locked.txt", status: "M" }));
+
+    await fs.unlink(path.join(root, "locked.txt"));
+    const afterDelete = await createWorkingTreeSnapshot(root, ["locked.txt"]);
+    const deletionDiff = await diffTrees(root, baseline, afterDelete);
+    expect(deletionDiff.changes).toContainEqual(expect.objectContaining({ file: "locked.txt", status: "D" }));
+  });
+
   it("compares only post-baseline edits and reverts a file without changing the real index", async () => {
     const root = await fs.mkdtemp(path.join(process.cwd(), ".intent-contract-test-"));
     temporaryRepositories.push(root);

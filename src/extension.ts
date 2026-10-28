@@ -9,10 +9,11 @@ import { detectFindingsForWorkspace } from "./detectors";
 import { analyzeArchitectureDrift, renderArchitectureDriftDiagram } from "./detectors/architectureDrift";
 import type { FileChange, Finding } from "./detectors/types";
 import { diffTrees } from "./git/diff";
-import { captureBaseline, createWorkingTreeSnapshot, releaseBaseline } from "./git/snapshot";
+import { captureBaseline, createWorkingTreeSnapshot } from "./git/snapshot";
 import { findRepositoryRoot, gitBuffer } from "./git/cli";
+import { ensurePolicyBaselineRef, policyTreeHash, releaseSessionBaselineRefs } from "./runtime/contracts";
 import { removeSession, readSession, writeSession, type ContractSession } from "./state/session";
-import { readWaivers, type Waiver } from "./state/waivers";
+import { readWaiversForContract, type Waiver } from "./state/waivers";
 import { writeViolationSummary } from "./state/violations";
 import { copyFindingsForAgent, openFindingDiff, revertFindingFile, waiveFinding, type ActionContext } from "./ui/actions";
 import { BaselineContentProvider } from "./ui/baselineContentProvider";
@@ -129,6 +130,10 @@ export function deactivate(): void {
 async function startContract(): Promise<void> {
   const repoRoot = await workspaceRepositoryRoot();
   if (!repoRoot) return;
+  if (await readSession(repoRoot)) {
+    void vscode.window.showWarningMessage("A contract session is already active. Stop it before starting a replacement baseline.");
+    return;
+  }
   const files = await discoverContracts(repoRoot);
   if (files.length === 0) {
     const choice = await vscode.window.showInformationMessage(
@@ -161,14 +166,14 @@ async function startContract(): Promise<void> {
     return;
   }
 
-  if (session?.baselineRef) await releaseBaseline(root ?? repoRoot, session.baselineRef);
   root = repoRoot;
   contract = selectedContract;
   await ensureIntentMetadataIgnored(repoRoot);
-  const snapshot = await captureBaseline(repoRoot);
+  const snapshot = await captureBaseline(repoRoot, selectedContract.scope.read_only);
   session = {
     ...snapshot,
-    activeContract: toRepoPath(path.relative(repoRoot, selected))
+    activeContract: toRepoPath(path.relative(repoRoot, selected)),
+    originalBaselineTreeHash: snapshot.baselineTreeHash
   };
   contract = await loadContractFromBaseline(repoRoot, session);
   await writeSession(repoRoot, session);
@@ -181,7 +186,7 @@ async function stopContract(): Promise<void> {
     statusBar.update(undefined, []);
     return;
   }
-  await releaseBaseline(root, session.baselineRef);
+  await releaseSessionBaselineRefs(root, session);
   await removeSession(root);
   try {
     await fs.unlink(path.join(root, ".intent", ".violations.md"));
@@ -219,7 +224,7 @@ async function configureAgents(context: vscode.ExtensionContext): Promise<void> 
     { label: "Cursor", description: ".cursor/mcp.json + .cursor/rules/intent-contract.mdc", picked: true, integration: "cursor" },
     { label: "Google Antigravity", description: ".agents/mcp_config.json + .agents/rules/intent-contract.md", picked: true, integration: "antigravity" },
     { label: "Claude Code", description: ".mcp.json + CLAUDE.md section", picked: true, integration: "claude" },
-    { label: "GitHub Copilot", description: ".mcp.json + .github/copilot-instructions.md", picked: true, integration: "copilot" },
+    { label: "GitHub Copilot", description: ".vscode/mcp.json + .github/copilot-instructions.md", picked: true, integration: "copilot" },
     { label: "Git Pre-Commit Hook", description: ".git/hooks/pre-commit (blocks commits on contract errors)", picked: true, integration: "precommit" },
     { label: "Git Pre-Push Hook", description: ".git/hooks/pre-push (blocks git push on contract errors)", picked: true, integration: "prepush" }
   ];
@@ -285,15 +290,22 @@ async function performCheck(): Promise<void> {
     }
     return;
   }
-  if (!session || !contract || session.baselineTreeHash !== savedSession.baselineTreeHash || session.activeContract !== savedSession.activeContract) {
-    session = savedSession;
-    contract = await loadContractFromBaseline(root, savedSession);
+  const pinnedSession = await ensurePolicyBaselineRef(root, savedSession);
+  if (
+    !session || !contract || policyTreeHash(session) !== policyTreeHash(pinnedSession) ||
+    session.activeContract !== pinnedSession.activeContract
+  ) {
+    session = pinnedSession;
+    contract = await loadContractFromBaseline(root, pinnedSession);
+  } else {
+    session = pinnedSession;
   }
   try {
-    const currentTreeHash = await createWorkingTreeSnapshot(root);
-    const diff = await diffTrees(root, session.baselineTreeHash, currentTreeHash);
-    const nextFindings = await detectFindingsForWorkspace(root, session.baselineTreeHash, diff, contract, session.activeContract);
-    const nextWaivers = await readWaivers(root);
+    const activePolicyTree = policyTreeHash(session);
+    const currentTreeHash = await createWorkingTreeSnapshot(root, contract.scope.read_only);
+    const diff = await diffTrees(root, activePolicyTree, currentTreeHash);
+    const nextFindings = await detectFindingsForWorkspace(root, activePolicyTree, diff, contract, session.activeContract);
+    const nextWaivers = await readWaiversForContract(root, contract.allow_exceptions);
     const active = nextFindings.filter((finding) => !nextWaivers.has(finding.id));
     changes = diff.changes;
     findings = nextFindings;
@@ -321,12 +333,13 @@ async function exportArchitectureDriftDiagram(): Promise<void> {
   }
   await runCheck();
   try {
-    const currentTreeHash = await createWorkingTreeSnapshot(root);
-    const currentDiff = await diffTrees(root, session.baselineTreeHash, currentTreeHash);
+    const activePolicyTree = policyTreeHash(session);
+    const currentTreeHash = await createWorkingTreeSnapshot(root, contract.scope.read_only);
+    const currentDiff = await diffTrees(root, activePolicyTree, currentTreeHash);
     changes = currentDiff.changes;
     const analysis = await analyzeArchitectureDrift(
       root,
-      session.baselineTreeHash,
+      activePolicyTree,
       currentDiff,
       contract,
       session.activeContract
@@ -362,7 +375,8 @@ async function restoreSession(): Promise<void> {
   if (!repoRoot) return;
   root = repoRoot;
   try {
-    const savedSession = await readSession(repoRoot);
+    const existingSession = await readSession(repoRoot);
+    const savedSession = existingSession ? await ensurePolicyBaselineRef(repoRoot, existingSession) : undefined;
     if (!savedSession) {
       statusBar.update(undefined, []);
       treeProvider.setState(false, [], new Map());
@@ -453,7 +467,7 @@ function errorMessage(error: unknown): string {
 
 async function loadContractFromBaseline(repoRoot: string, savedSession: ContractSession): Promise<Contract> {
   const buffer = await gitBuffer(repoRoot, [
-    "cat-file", "blob", `${savedSession.baselineTreeHash}:${savedSession.activeContract}`
+    "cat-file", "blob", `${policyTreeHash(savedSession)}:${savedSession.activeContract}`
   ]);
   return parseContract(buffer.toString("utf8"), path.basename(savedSession.activeContract));
 }

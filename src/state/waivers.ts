@@ -29,6 +29,10 @@ export async function readWaivers(root: string): Promise<Map<string, Waiver>> {
   }
 }
 
+export async function readWaiversForContract(root: string, allowExceptions: boolean): Promise<Map<string, Waiver>> {
+  return allowExceptions ? readWaivers(root) : new Map();
+}
+
 export async function addWaiver(root: string, waiver: Waiver): Promise<void> {
   const waivers = await readWaivers(root);
   waivers.set(waiver.id, waiver);

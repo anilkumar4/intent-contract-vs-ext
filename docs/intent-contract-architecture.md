@@ -21,7 +21,7 @@ Autonomous AI coding agents (Claude Code, Cursor, Copilot Workspace, Google Anti
 
 ### Benefits
 - **Agent Containment Without Frustration**: Intent Contract does not intercept or block file writes while editing or building. It runs asynchronously, computing findings within milliseconds and surfacing diagnostics instantly.
-- **Zero Self-Approval Loopholes**: The contract, waivers, and architecture diagrams are evaluated against the **baseline tree**, never the dirty working tree. An agent cannot authorize its own changes by modifying the YAML contract or diagram during a session.
+- **Policy Baseline**: The contract and referenced architecture diagram are loaded from the effective policy baseline, not the dirty working tree. Waivers are read from the separate `.intent/waivers.json` state file and applied only when the baseline contract sets `allow_exceptions: true`.
 - **Non-Invasive Git Hygiene**: Baseline snapshots are captured via an isolated temporary Git index. The developer's real Git staging index and untracked files are never touched or modified.
 - **Supply Chain & Test Defense**: Detects subtle test weakening across JavaScript, TypeScript, Python, and Go, plus supply-chain risks across npm, pip, Go, Cargo, Maven, Gradle, .NET, and Ruby.
 - **Unified Across VS Code, CLI, and MCP**: The exact same detector pipeline powers the VS Code extension, the headless CLI for CI/CD, and the Model Context Protocol (MCP) server for agents.
@@ -98,16 +98,16 @@ When a contract is started (`intentContract.start` or `intent-contract start <na
 1. **Isolated Index**: The snapshot engine creates an isolated temporary index file via `GIT_INDEX_FILE`. The repository's actual `.git/index` is never read or written.
 2. **Working Tree Snapshot**: The temporary index stages the working directory, including untracked and unstaged files (`git add -A`).
 3. **Ignored Secret Inclusion**: Canonical secrets such as `.env` and `secrets/**` (which are typically in `.gitignore`) are force-added (`git add -f`) into the temporary index so that changes to existing environment configs are tracked.
-4. **Baseline Tree Hash**: `git write-tree` writes a Git tree object representing the baseline, and a reference is saved under `refs/intent/baselines/<id>` so Git's garbage collection does not purge it.
+4. **Baseline Tree Hash**: `git write-tree` writes a Git tree object representing the baseline, and a reference is saved under `refs/intent-contract/baselines/<id>` so Git's garbage collection does not purge it. Ignored paths matched by `scope.read_only`, plus selected secret and high-risk paths, are force-added to the temporary snapshot so their edits and deletions remain detectable.
 5. **Session State**: The state is recorded in `.intent/.state.json` (which is automatically added to `.gitignore`).
 
 ### 4.2. Baseline Immutability & Re-baselining Protection
-- **Baseline Policy Reading**: When running checks, the active contract (`.intent/<name>.yaml`) and referenced architecture diagrams are read directly from `session.baselineTreeHash` using `git cat-file blob`.
-- **Anti-Laundering Guard**: If an agent attempts to re-run `start` mid-session after introducing unauthorized edits, the session retains `originalBaselineTreeHash`. Violations against the original baseline remain visible unless `--force` is explicitly supplied.
+- **Baseline Policy Reading**: When running checks, the active contract (`.intent/<name>.yaml`) and referenced architecture diagrams are read from the effective policy tree using `git cat-file blob`. Newly created sessions use the captured baseline as that policy tree; legacy sessions pin a distinct original policy tree with `originalBaselineRef` so Git garbage collection cannot remove it.
+- **Explicit Re-baselining**: A second `start` is rejected while a session is active. The user must stop the current session or pass `--force` to intentionally capture a replacement baseline; old baseline references are released only after the new session has been saved.
 
 ### 4.3. Parallelized Diffing with Zero Overhead
 When code changes occur:
-1. `createWorkingTreeSnapshot(root)` captures the current working tree into another lightweight temporary tree.
+1. `createWorkingTreeSnapshot(root, scope.read_only)` captures the current working tree into another lightweight temporary tree, including ignored files matched by read-only policy.
 2. `diffTrees(root, baselineTreeHash, currentTreeHash)` runs `git diff-tree -r -M -z --name-status` and `git diff -M -U3`.
 3. Before and after file contents are read concurrently via `Promise.all` using `git cat-file blob <tree>:<path>`, capping buffer sizes at 2 MB to prevent memory spikes while eliminating serialized process spawn bottlenecks.
 
@@ -120,13 +120,13 @@ When a file is reverted via the VS Code UI, CLI (`intent-contract revert <file>`
 
 ### 4.5. Git Hooks: Blocking `git commit` and `git push`
 Intent Contract can install Git hooks (`intent-contract hook install` or via VS Code **Configure AI Agents & MCP**):
-- **`pre-commit`**: Executes `intent-contract check`. If any unwaived error-level finding exists, the commit is aborted.
-- **`pre-push`**: Executes `intent-contract check` before any push to a remote repository. If active contract violations exist, it prints a prominent error banner to `stderr` and aborts the push, guaranteeing that out-of-scope or test-weakened code never reaches remote branches:
+- **`pre-commit`**: Executes `intent-contract check --index`, applying paths staged since the session's starting HEAD to the policy baseline before checking. If any unwaived error-level finding exists, the commit is aborted.
+- **`pre-push`**: Verifies each pushed local commit SHA with `intent-contract check --revision <sha>`. If the pushed revision has active contract violations, it prints a prominent error banner to `stderr` and aborts the push:
 
 ```
 ======================================================================
  [Intent Contract] Git push BLOCKED!
- Active contract violations were detected in your changes.
+ Active contract violations were detected in the pushed revision.
  Resolve error findings or obtain an authorized waiver before pushing.
  Run 'intent-contract check' or inspect VS Code diagnostics for details.
 ======================================================================
@@ -149,7 +149,7 @@ sequenceDiagram
     Ext->>Runtime: startIntentContract(root, "feature-billing")
     Runtime->>Git: Capture working tree baseline (temp index)
     Git-->>Runtime: Baseline tree hash (e.g. 7f2a1b)
-    Runtime->>Git: Store ref refs/intent/baselines/...
+    Runtime->>Git: Store ref refs/intent-contract/baselines/...
     Runtime->>Runtime: Write .intent/.state.json
     Runtime-->>User: Contract active (Baseline locked)
 
@@ -294,7 +294,7 @@ sequenceDiagram
 intent-contract start <contract-name> [--force]
 
 # Check active contract or verify against a Git ref without a session
-intent-contract check [--base <ref>] [--contract <path>] [--format text|json|github]
+intent-contract check [--base <ref>] [--contract <path>] [--index | --revision <sha>] [--format text|json|github]
 
 # Revert a file back to its captured baseline
 intent-contract revert <file-path>
