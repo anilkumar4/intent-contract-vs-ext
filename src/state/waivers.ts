@@ -8,8 +8,15 @@ export interface Waiver {
 }
 
 export async function readWaivers(root: string): Promise<Map<string, Waiver>> {
+  const filePath = waiverPath(root);
   try {
-    const parsed: unknown = JSON.parse(await fs.readFile(waiverPath(root), "utf8"));
+    const content = await fs.readFile(filePath, "utf8");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch (parseError) {
+      throw new Error(`Failed to parse .intent/waivers.json: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+    }
     if (!Array.isArray(parsed)) return new Map();
     const waivers = new Map<string, Waiver>();
     for (const item of parsed) {
@@ -36,7 +43,14 @@ function waiverPath(root: string): string {
 function isWaiver(value: unknown): value is Waiver {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
-  return typeof candidate.id === "string" && typeof candidate.reason === "string" && typeof candidate.timestamp === "string";
+  return (
+    typeof candidate.id === "string" &&
+    candidate.id.trim().length > 0 &&
+    typeof candidate.reason === "string" &&
+    candidate.reason.trim().length > 0 &&
+    typeof candidate.timestamp === "string" &&
+    !Number.isNaN(Date.parse(candidate.timestamp))
+  );
 }
 
 function isMissing(error: unknown): boolean {

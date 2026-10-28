@@ -2,6 +2,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { gitText, optionalHeadSha } from "./cli";
+import { toRepoPath } from "../util/paths";
+import { highRiskRule } from "../detectors/highRisk";
 
 export interface BaselineSnapshot {
   baselineTreeHash: string;
@@ -24,11 +26,47 @@ export async function createWorkingTreeSnapshot(root: string): Promise<string> {
     }
     const env = { GIT_INDEX_FILE: temporaryIndexPath };
     await gitText(root, ["add", "-A", "--", "."], env);
+
+    // Also include ignored files that are high-risk or match read_only patterns or secrets
+    try {
+      const ignoredRaw = await gitText(root, ["status", "--porcelain=v1", "-z", "-uall", "--ignored"]);
+      const fields = ignoredRaw.split("\0");
+      const ignoredFiles: string[] = [];
+      for (const field of fields) {
+        if (!field.startsWith("!! ")) continue;
+        const repoFile = toRepoPath(field.slice(3));
+        if (
+          repoFile.startsWith(".git/") ||
+          repoFile.startsWith("node_modules/") ||
+          repoFile.startsWith(".vscode-test/") ||
+          repoFile.startsWith("dist/")
+        ) {
+          continue;
+        }
+        if (shouldTrackIgnoredFile(repoFile)) {
+          ignoredFiles.push(repoFile);
+        }
+      }
+      if (ignoredFiles.length > 0) {
+        await gitText(root, ["add", "-f", "--", ...ignoredFiles], env);
+      }
+    } catch {
+      // Continue even if ignored file status fails
+    }
+
     await gitText(root, ["rm", "--cached", "--ignore-unmatch", "--", ".intent/.state.json", ".intent/.violations.md", ".intent/waivers.json"], env);
     return (await gitText(root, ["write-tree"], env)).trim();
   } finally {
     await fs.rm(temporaryDirectory, { recursive: true, force: true });
   }
+}
+
+function shouldTrackIgnoredFile(filePath: string): boolean {
+  if (highRiskRule(filePath) !== undefined) return true;
+  const normalized = filePath.replace(/\\/g, "/");
+  if (normalized.startsWith("secrets/") || normalized.includes("secret") || normalized.includes("token")) return true;
+  if (normalized.split("/").some((part) => part.startsWith(".env"))) return true;
+  return false;
 }
 
 export async function captureBaseline(root: string): Promise<BaselineSnapshot> {

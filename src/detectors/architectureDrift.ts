@@ -11,7 +11,9 @@ import type { Contract, Finding, ParsedDiff } from "./types";
 
 const MAX_DIAGRAM_BYTES = 5 * 1024 * 1024;
 const JS_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"]);
-const SOURCE_EXTENSIONS = new Set([...JS_EXTENSIONS, ".py", ".go"]);
+const JVM_EXTENSIONS = new Set([".java", ".kt"]);
+const CSHARP_EXTENSIONS = new Set([".cs"]);
+const SOURCE_EXTENSIONS = new Set([...JS_EXTENSIONS, ".py", ".go", ...JVM_EXTENSIONS, ...CSHARP_EXTENSIONS]);
 
 interface ImportRef { specifier: string; line: number; fallbackSpecifier?: string }
 interface Mapping { nodeId: string; patterns: string[] }
@@ -68,7 +70,13 @@ export async function analyzeArchitectureDrift(
     if (change.afterContent === undefined || !SOURCE_EXTENSIONS.has(extension)) continue;
     const imports = JS_EXTENSIONS.has(extension)
       ? collectJsImports(sourcePath, change.afterContent, typescript)
-      : extension === ".py" ? collectPythonImports(change.afterContent) : collectGoImports(change.afterContent);
+      : extension === ".py"
+        ? collectPythonImports(change.afterContent)
+        : extension === ".go"
+          ? collectGoImports(change.afterContent)
+          : JVM_EXTENSIONS.has(extension)
+            ? collectJvmImports(change.afterContent)
+            : collectCsharpImports(change.afterContent);
     if (!imports.length) continue;
     const sourceNode = matchNode(sourcePath, mappingResult.mappings);
 
@@ -77,7 +85,9 @@ export async function analyzeArchitectureDrift(
         ? await resolveJs(root, sourcePath, imported.specifier, compilerOptions, typescript)
         : extension === ".py"
           ? await resolvePython(root, sourcePath, imported.specifier, imported.fallbackSpecifier)
-          : await resolveGo(root, sourcePath, imported.specifier, goModule);
+          : extension === ".go"
+            ? await resolveGo(root, sourcePath, imported.specifier, goModule)
+            : await resolveJvmOrCsharp(root, sourcePath, imported.specifier);
       if (resolved.issue) {
         if (!warningMessages.has(resolved.issue)) {
           warningMessages.add(resolved.issue);
@@ -234,21 +244,28 @@ function collectPythonImports(content: string): ImportRef[] {
 async function resolvePython(root: string, sourcePath: string, specifier: string, fallbackSpecifier?: string):
 Promise<{ targetPath?: string; internal: boolean; issue?: string }> {
   const relative = specifier.startsWith(".");
-  let base: string;
+  const candidateBases: string[] = [];
   if (relative) {
     const level = specifier.match(/^\.+/)?.[0].length ?? 1;
-    base = path.dirname(path.resolve(root, sourcePath));
+    let base = path.dirname(path.resolve(root, sourcePath));
     for (let index = 1; index < level; index += 1) base = path.dirname(base);
-    base = path.resolve(base, specifier.slice(level).replace(/\./g, path.sep));
+    candidateBases.push(path.resolve(base, specifier.slice(level).replace(/\./g, path.sep)));
   } else {
-    base = path.resolve(root, specifier.replace(/\./g, path.sep));
+    const relSpec = specifier.replace(/\./g, path.sep);
+    candidateBases.push(path.resolve(root, relSpec));
+    const parts = sourcePath.replace(/\\/g, "/").split("/");
+    for (let i = 1; i < parts.length; i++) {
+      candidateBases.push(path.resolve(root, ...parts.slice(0, i), relSpec));
+    }
   }
-  for (const candidate of [base + ".py", path.join(base, "__init__.py")]) {
-    if (await isFile(candidate)) return { targetPath: toRepoPath(path.relative(root, candidate)), internal: true };
-  }
-  if (await isDirectory(base)) {
-    const file = (await fs.readdir(base).catch(() => [])).filter((name) => name.endsWith(".py")).sort()[0];
-    if (file) return { targetPath: toRepoPath(path.relative(root, path.join(base, file))), internal: true };
+  for (const base of candidateBases) {
+    for (const candidate of [base + ".py", path.join(base, "__init__.py")]) {
+      if (await isFile(candidate)) return { targetPath: toRepoPath(path.relative(root, candidate)), internal: true };
+    }
+    if (await isDirectory(base)) {
+      const file = (await fs.readdir(base).catch(() => [])).filter((name) => name.endsWith(".py")).sort()[0];
+      if (file) return { targetPath: toRepoPath(path.relative(root, path.join(base, file))), internal: true };
+    }
   }
   if (fallbackSpecifier && fallbackSpecifier !== specifier) {
     const fallback = await resolvePython(root, sourcePath, fallbackSpecifier);
@@ -260,7 +277,7 @@ Promise<{ targetPath?: string; internal: boolean; issue?: string }> {
 
 function collectGoImports(content: string): ImportRef[] {
   const imports: ImportRef[] = [];
-  const expression = /\bimport\s+(?:\(([\s\S]*?)\)|"([^"]+)"|\x60([^\x60]+)\x60)/g;
+  const expression = /\bimport\s+(?:\(([\s\S]*?)\)|(?:[\w.]+\s+)?(?:"([^"]+)"|\x60([^\x60]+)\x60))/g;
   for (const match of content.matchAll(expression)) {
     if (match[2] || match[3]) {
       imports.push({ specifier: match[2] ?? match[3], line: lineAt(content, match.index ?? 0) });
@@ -273,6 +290,45 @@ function collectGoImports(content: string): ImportRef[] {
     }
   }
   return imports;
+}
+
+function collectJvmImports(content: string): ImportRef[] {
+  const imports: ImportRef[] = [];
+  const regex = /^\s*import\s+(?:static\s+)?([A-Za-z0-9_.]+);/gm;
+  for (const match of content.matchAll(regex)) {
+    imports.push({ specifier: match[1], line: lineAt(content, match.index ?? 0) });
+  }
+  return imports;
+}
+
+function collectCsharpImports(content: string): ImportRef[] {
+  const imports: ImportRef[] = [];
+  const regex = /^\s*using\s+(?:static\s+)?([A-Za-z0-9_.]+);/gm;
+  for (const match of content.matchAll(regex)) {
+    imports.push({ specifier: match[1], line: lineAt(content, match.index ?? 0) });
+  }
+  return imports;
+}
+
+async function resolveJvmOrCsharp(root: string, sourcePath: string, specifier: string):
+Promise<{ targetPath?: string; internal: boolean; issue?: string }> {
+  const relSpec = specifier.replace(/\./g, path.sep);
+  const parts = sourcePath.replace(/\\/g, "/").split("/");
+  const candidateBases = [path.resolve(root, relSpec)];
+  for (let i = 1; i < parts.length; i++) {
+    candidateBases.push(path.resolve(root, ...parts.slice(0, i), relSpec));
+  }
+  for (const base of candidateBases) {
+    for (const ext of [".java", ".kt", ".cs"]) {
+      if (await isFile(base + ext)) return { targetPath: toRepoPath(path.relative(root, base + ext)), internal: true };
+    }
+    if (await isDirectory(base)) {
+      const files = await fs.readdir(base).catch(() => []);
+      const match = files.find((name) => name.endsWith(".java") || name.endsWith(".kt") || name.endsWith(".cs"));
+      if (match) return { targetPath: toRepoPath(path.relative(root, path.join(base, match))), internal: true };
+    }
+  }
+  return { targetPath: specifier.replace(/\./g, "/"), internal: true };
 }
 
 async function resolveJs(root: string, sourcePath: string, specifier: string, options: ts.CompilerOptions, tsApi: typeof import("typescript")):

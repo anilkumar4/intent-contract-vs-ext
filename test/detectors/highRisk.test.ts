@@ -23,10 +23,37 @@ describe("high risk file detector", () => {
   });
 
   it("flags environment, terraform, Docker, agent config, and lock files", () => {
-    const files = [".env.production", "infra/main.tf", "Dockerfile.dev", "docker-compose.yml", ".cursorrules", ".agents/settings.yaml", "pnpm-lock.yaml"];
+    const files = [
+      ".env", ".env.production", "infra/main.tf", "infra/prod.tfvars", "infra/main.bicep",
+      "Dockerfile.dev", "docker-compose.yml", "k8s/deployment.yaml",
+      ".github/CODEOWNERS", ".github/actions/setup/action.yml", ".github/dependabot.yml",
+      "Jenkinsfile", "azure-pipelines.yml", ".circleci/config.yml",
+      ".npmrc", ".vscode/tasks.json", ".vscode/settings.json", ".husky/pre-commit",
+      ".mcp.json", ".cursor/mcp.json", ".cursor/rules/team.mdc",
+      "CLAUDE.md", "AGENTS.md", ".github/copilot-instructions.md",
+      ".cursorrules", ".agents/settings.yaml", "pnpm-lock.yaml"
+    ];
     const findings = detectHighRiskFiles(files.map(makeChange), contract);
     expect(findings).toHaveLength(files.length);
-    expect(findings.every((finding) => finding.severity === "error")).toBe(true);
+    expect(findings.every((finding) => finding.severity === "error" && finding.detector === "high_risk_files")).toBe(true);
+  });
+
+  it("supports per-contract custom high_risk include and exclude", () => {
+    const customContract: Contract = {
+      ...contract,
+      high_risk: {
+        include: ["helm/**", "db/migrations/**"],
+        exclude: [".npmrc"]
+      }
+    };
+    const findings = detectHighRiskFiles([
+      makeChange("helm/values.yaml"),
+      makeChange("db/migrations/001_init.sql"),
+      makeChange(".npmrc")
+    ], customContract);
+
+    expect(findings).toHaveLength(2);
+    expect(findings.map((f) => f.file).sort()).toEqual(["db/migrations/001_init.sql", "helm/values.yaml"]);
   });
 
   it("does not flag an ordinary source file or run when the forbid is absent", () => {

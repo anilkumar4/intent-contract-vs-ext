@@ -3,10 +3,10 @@ import type { Contract, Finding, FileChange } from "./types";
 import { makeFinding } from "./finding";
 import { changedLine, diffEvidence } from "./diffEvidence";
 
-const dependencySections = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
+const dependencySections = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies", "overrides", "resolutions"];
 const lockfiles = new Set([
   "package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lockb", "bun.lock",
-  "poetry.lock", "Pipfile.lock", "Cargo.lock", "go.sum"
+  "poetry.lock", "Pipfile.lock", "Cargo.lock", "go.sum", "Gemfile.lock", "gradle.lockfile", "packages.lock.json"
 ]);
 
 export function detectDependencies(changes: FileChange[], contract: Contract): Finding[] {
@@ -70,7 +70,9 @@ function isManifest(file: string): boolean {
   const normalized = file.replace(/\\/g, "/");
   const name = path.posix.basename(normalized);
   return name === "package.json" || name === "pyproject.toml" || name === "Pipfile" ||
-    name === "go.mod" || name === "Cargo.toml" || /^requirements.*\.txt$/i.test(name);
+    name === "go.mod" || name === "Cargo.toml" || /^requirements.*\.txt$/i.test(name) ||
+    name === "pom.xml" || name === "build.gradle" || name === "build.gradle.kts" ||
+    name.endsWith(".csproj") || name === "Gemfile";
 }
 
 function correspondingManifest(lockfile: string): string | undefined {
@@ -85,7 +87,11 @@ function correspondingManifest(lockfile: string): string | undefined {
         ? "Cargo.toml"
         : name === "go.sum"
           ? "go.mod"
-          : undefined;
+          : name === "Gemfile.lock"
+            ? "Gemfile"
+            : name === "gradle.lockfile"
+              ? "build.gradle.kts"
+              : undefined;
   return manifestName ? path.posix.join(directory, manifestName) : undefined;
 }
 
@@ -98,6 +104,10 @@ function extractDependencies(file: string, content: string): Map<string, string>
   if (name === "Cargo.toml") return parseCargoToml(content);
   if (name === "Pipfile") return parsePipfile(content);
   if (name === "pyproject.toml") return parsePyproject(content);
+  if (name === "pom.xml") return parsePomXml(content);
+  if (name === "build.gradle" || name === "build.gradle.kts") return parseGradle(content);
+  if (name.endsWith(".csproj")) return parseCsProj(content);
+  if (name === "Gemfile") return parseGemfile(content);
   return new Map();
 }
 
@@ -112,6 +122,15 @@ function parsePackageJson(content: string): Map<string, string> {
       if (typeof values !== "object" || values === null || Array.isArray(values)) continue;
       for (const [packageName, version] of Object.entries(values)) {
         result.set(packageName, stringifyVersion(version));
+      }
+    }
+    const scripts = root.scripts;
+    if (typeof scripts === "object" && scripts !== null && !Array.isArray(scripts)) {
+      const lifecycle = ["preinstall", "install", "postinstall", "preuninstall", "postuninstall"];
+      for (const [key, val] of Object.entries(scripts)) {
+        if (lifecycle.includes(key.toLowerCase())) {
+          result.set(`${key} script`, stringifyVersion(val));
+        }
       }
     }
   } catch {
@@ -140,6 +159,7 @@ function parseRequirements(content: string): Map<string, string> {
 function parseGoMod(content: string): Map<string, string> {
   const result = new Map<string, string>();
   let inRequireBlock = false;
+  let inReplaceBlock = false;
   for (const rawLine of content.split(/\r?\n/)) {
     const line = rawLine.replace(/\/\/.*$/, "").trim();
     if (/^require\s*\($/.test(line)) {
@@ -150,10 +170,77 @@ function parseGoMod(content: string): Map<string, string> {
       inRequireBlock = false;
       continue;
     }
+    if (/^replace\s*\($/.test(line)) {
+      inReplaceBlock = true;
+      continue;
+    }
+    if (inReplaceBlock && line === ")") {
+      inReplaceBlock = false;
+      continue;
+    }
     const match = inRequireBlock
       ? /^([^\s]+)\s+([^\s]+)$/.exec(line)
       : /^require\s+([^\s]+)\s+([^\s]+)$/.exec(line);
-    if (match) result.set(match[1], match[2]);
+    if (match) {
+      result.set(match[1], match[2]);
+      continue;
+    }
+    const repMatch = inReplaceBlock
+      ? /^([^\s]+)(?:\s+[^\s]+)?\s*=>\s*(.+)$/.exec(line)
+      : /^replace\s+([^\s]+)(?:\s+[^\s]+)?\s*=>\s*(.+)$/.exec(line);
+    if (repMatch) {
+      result.set(`replace directive: ${repMatch[1]}`, repMatch[2]);
+    }
+  }
+  return result;
+}
+
+function parsePomXml(content: string): Map<string, string> {
+  const result = new Map<string, string>();
+  const depRegex = /<dependency>([\s\S]*?)<\/dependency>/g;
+  for (const match of content.matchAll(depRegex)) {
+    const block = match[1];
+    const group = /<groupId>\s*([^<\s]+)\s*<\/groupId>/.exec(block)?.[1] ?? "";
+    const artifact = /<artifactId>\s*([^<\s]+)\s*<\/artifactId>/.exec(block)?.[1] ?? "";
+    const version = /<version>\s*([^<\s]+)\s*<\/version>/.exec(block)?.[1] ?? "*";
+    if (group || artifact) {
+      result.set(`${group}:${artifact}`, version);
+    }
+  }
+  return result;
+}
+
+function parseGradle(content: string): Map<string, string> {
+  const result = new Map<string, string>();
+  const depRegex = /\b(?:implementation|api|testImplementation|compileOnly|runtimeOnly)\s*(?:\(|\s)\s*["']([^"':]+):([^"':]+)(?::([^"':]+))?["']/g;
+  for (const match of content.matchAll(depRegex)) {
+    const group = match[1];
+    const artifact = match[2];
+    const version = match[3] ?? "*";
+    result.set(`${group}:${artifact}`, version);
+  }
+  return result;
+}
+
+function parseCsProj(content: string): Map<string, string> {
+  const result = new Map<string, string>();
+  const pkgRegex = /<PackageReference\s+[^>]*Include=["']([^"']+)["'][^>]*(?:Version=["']([^"']+)["'])?/gi;
+  for (const match of content.matchAll(pkgRegex)) {
+    const name = match[1];
+    const version = match[2] ?? "*";
+    result.set(name, version);
+  }
+  return result;
+}
+
+function parseGemfile(content: string): Map<string, string> {
+  const result = new Map<string, string>();
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.replace(/#.*$/, "").trim();
+    const match = /^gem\s+["']([^"']+)["'](?:\s*,\s*["']([^"']+)["'])?/.exec(line);
+    if (match) {
+      result.set(match[1], match[2] ?? "*");
+    }
   }
   return result;
 }

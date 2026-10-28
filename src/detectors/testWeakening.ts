@@ -24,6 +24,7 @@ interface Assertion {
   source: Token[];
   approxValue?: string;
   relativeTolerance?: number;
+  absoluteTolerance?: number;
 }
 
 const tierOne = new Set([
@@ -48,6 +49,19 @@ export function detectTestWeakening(changes: FileChange[]): Finding[] {
     const file = change.status === "D" ? (change.oldFile ?? change.file) : (change.newFile ?? change.file);
     const normalized = normalizePath(file);
 
+    if (/(?:vitest|jest)\.config\.[a-z0-9]+$/i.test(normalized)) {
+      const addedText = change.additions.map((l) => l.text).join("\n");
+      if (/\b(?:exclude|testPathIgnorePatterns|coveragePathIgnorePatterns)\b/.test(addedText)) {
+        findings.push(makeFinding(
+          "test_weakening", normalized, "test_runner_exclusion", changeEvidence(change), "error",
+          "Test runner configuration excludes tests or paths from test execution",
+          firstChangedLine(change),
+          "Revert exclusions in test runner configuration. Ensure all test suites are executed."
+        ));
+      }
+      continue;
+    }
+
     if (/\.snap$/i.test(normalized) && (change.status === "M" || change.status === "D")) {
       const deleted = change.status === "D";
       findings.push(makeFinding(
@@ -70,6 +84,32 @@ export function detectTestWeakening(changes: FileChange[]): Finding[] {
       continue;
     }
     if (change.status !== "M" && change.status !== "A") continue;
+
+    if (normalized.endsWith("_test.go")) {
+      const added = change.additions.map((l) => l.text).join("\n");
+      if (/\bt\.(?:Skip|Skipf|SkipNow)\s*\(/.test(added)) {
+        findings.push(makeFinding(
+          "test_weakening", normalized, "test_skipped", changeEvidence(change), "error",
+          "Go test was skipped with t.Skip()",
+          firstChangedLine(change),
+          "Revert t.Skip() call and fix the failing test."
+        ));
+      }
+      continue;
+    }
+
+    if (/\.(?:java|kt)$/.test(normalized)) {
+      const added = change.additions.map((l) => l.text).join("\n");
+      if (/@(?:Disabled|Ignore)\b/.test(added)) {
+        findings.push(makeFinding(
+          "test_weakening", normalized, "test_skipped", changeEvidence(change), "error",
+          "Test was disabled with @Disabled or @Ignore",
+          firstChangedLine(change),
+          "Revert @Disabled / @Ignore annotation and fix the failing test."
+        ));
+      }
+      continue;
+    }
 
     const language = languageFor(normalized);
     if (!language) continue;
@@ -191,12 +231,18 @@ function emitToleranceWidening(findings: Finding[], file: string, hunk: DiffHunk
   for (const [before, after] of pairAssertions(oldAssertions, newAssertions, (left, right) =>
     left.language === "python" && right.language === "python" && left.matcher === "==" && right.matcher === "==" &&
     left.target === right.target && left.approxValue !== undefined && right.approxValue !== undefined &&
-    left.approxValue === right.approxValue && left.relativeTolerance !== undefined && right.relativeTolerance !== undefined &&
-    right.relativeTolerance > left.relativeTolerance
+    left.approxValue === right.approxValue && (
+      (left.relativeTolerance !== undefined && right.relativeTolerance !== undefined && right.relativeTolerance > left.relativeTolerance) ||
+      (left.absoluteTolerance !== undefined && right.absoluteTolerance !== undefined && right.absoluteTolerance > left.absoluteTolerance)
+    )
   )) {
+    const isRel = after.relativeTolerance !== undefined && before.relativeTolerance !== undefined && after.relativeTolerance > before.relativeTolerance;
+    const desc = isRel
+      ? `pytest.approx relative tolerance increased (${before.relativeTolerance} -> ${after.relativeTolerance})`
+      : `pytest.approx absolute tolerance increased (${before.absoluteTolerance} -> ${after.absoluteTolerance})`;
     findings.push(makeFinding(
       "test_weakening", file, "numeric_tolerance_widened", pairEvidence(hunk, before, after), "error",
-      `pytest.approx relative tolerance increased (${before.relativeTolerance} -> ${after.relativeTolerance})`,
+      desc,
       after.line,
       "Restore the original pytest.approx tolerance or justify an approved tolerance change. Correct the implementation rather than relaxing the expected range."
     ));
@@ -449,6 +495,7 @@ function parsePythonAssertions(tokens: Token[], side: Side): Assertion[] {
     let args: Token[][];
     let approxValue: string | undefined;
     let relativeTolerance: number | undefined;
+    let absoluteTolerance: number | undefined;
 
     if (operatorIndex >= 0) {
       const operator = pythonOperatorAt(expression, operatorIndex);
@@ -462,6 +509,7 @@ function parsePythonAssertions(tokens: Token[], side: Side): Assertion[] {
       if (approx) {
         approxValue = approx.expected;
         relativeTolerance = approx.relativeTolerance;
+        absoluteTolerance = approx.absoluteTolerance;
       }
     } else if (isCallExpression(expression, "bool")) {
       targetTokens = expression;
@@ -486,7 +534,8 @@ function parsePythonAssertions(tokens: Token[], side: Side): Assertion[] {
       changed,
       source,
       ...(approxValue === undefined ? {} : { approxValue }),
-      ...(relativeTolerance === undefined ? {} : { relativeTolerance })
+      ...(relativeTolerance === undefined ? {} : { relativeTolerance }),
+      ...(absoluteTolerance === undefined ? {} : { absoluteTolerance })
     });
   }
   return assertions;
@@ -512,7 +561,7 @@ function pythonOperatorAt(tokens: Token[], index: number): { name: string; width
   return { name: tokens[index].value, width: 1 };
 }
 
-function parsePytestApprox(tokens: Token[]): { expected: string; relativeTolerance?: number } | undefined {
+function parsePytestApprox(tokens: Token[]): { expected: string; relativeTolerance?: number; absoluteTolerance?: number } | undefined {
   if (!matchesAt(tokens, 0, ["pytest", ".", "approx", "("])) return undefined;
   const open = 3;
   const close = matchingIndex(tokens, open, "(", ")");
@@ -520,14 +569,24 @@ function parsePytestApprox(tokens: Token[]): { expected: string; relativeToleran
   const args = splitArguments(tokens.slice(open + 1, close));
   const expected = normalizeTokens(args[0] ?? []);
   let relativeTolerance: number | undefined;
+  let absoluteTolerance: number | undefined;
   for (const arg of args.slice(1)) {
     const equals = arg.findIndex((token) => token.value === "=");
-    if (equals > 0 && arg[equals - 1].value === "rel") {
-      const value = Number(arg[equals + 1]?.value);
-      if (Number.isFinite(value)) relativeTolerance = value;
+    if (equals > 0) {
+      const paramName = arg[equals - 1].value;
+      const valueStr = arg.slice(equals + 1).map((t) => t.value).join("");
+      const value = Number(valueStr);
+      if (Number.isFinite(value)) {
+        if (paramName === "rel") relativeTolerance = value;
+        if (paramName === "abs") absoluteTolerance = value;
+      }
     }
   }
-  return { expected, ...(relativeTolerance === undefined ? {} : { relativeTolerance }) };
+  return {
+    expected,
+    ...(relativeTolerance === undefined ? {} : { relativeTolerance }),
+    ...(absoluteTolerance === undefined ? {} : { absoluteTolerance })
+  };
 }
 
 function isCallExpression(tokens: Token[], name: string): boolean {
@@ -853,23 +912,25 @@ function firstChangedLine(change: FileChange, side?: Side): number | undefined {
 function isTestFile(file: string): boolean {
   const normalized = normalizePath(file).toLowerCase();
   const basename = normalized.slice(normalized.lastIndexOf("/") + 1);
-  const extension = /\.(?:js|jsx|ts|tsx|py)$/.test(normalized);
+  const extension = /\.(?:js|jsx|ts|tsx|mjs|cjs|mts|cts|py|go|java|kt)$/.test(normalized);
   if (!extension) return false;
-  return /(?:^|\/)__tests__(?:\/|$)/.test(normalized) ||
-    /\.(?:test|spec)\.(?:js|jsx|ts|tsx)$/.test(basename) ||
+  return /(?:^|\/)(?:__tests__|tests?)(?:\/|$)/.test(normalized) ||
+    /\.(?:test|spec)\.(?:js|jsx|ts|tsx|mjs|cjs|mts|cts)$/.test(basename) ||
     /^test_.+\.py$/.test(basename) ||
-    /^.+_test\.py$/.test(basename);
+    /^.+_test\.py$/.test(basename) ||
+    /_test\.go$/.test(basename) ||
+    /(?:test.*|.*test.*)\.(?:java|kt)$/i.test(basename);
 }
 
 function isImplementationFile(file: string): boolean {
   const normalized = normalizePath(file).toLowerCase();
-  if (!/\.(?:js|jsx|ts|tsx|py)$/.test(normalized) || isTestFile(normalized)) return false;
+  if (!/\.(?:js|jsx|ts|tsx|mjs|cjs|mts|cts|py|go|java|kt)$/.test(normalized) || isTestFile(normalized)) return false;
   if (normalized.split("/").some((part) => ["test", "tests", "__tests__", "node_modules", "dist", "coverage"].includes(part))) return false;
   return true;
 }
 
 function languageFor(file: string): Language | undefined {
-  return file.toLowerCase().endsWith(".py") ? "python" : /\.(?:js|jsx|ts|tsx)$/i.test(file) ? "js" : undefined;
+  return file.toLowerCase().endsWith(".py") ? "python" : /\.(?:js|jsx|ts|tsx|mjs|cjs|mts|cts)$/i.test(file) ? "js" : undefined;
 }
 
 function normalizePath(file: string): string {

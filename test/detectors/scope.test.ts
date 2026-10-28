@@ -59,6 +59,36 @@ describe("scope detector", () => {
       { severity: "warning", file: "src/calc.ts" }
     ]);
   });
+
+  it("does not allow a negated glob in scope.modify to widen scope to the whole repository", () => {
+    const contract: Contract = {
+      ...baseContract,
+      scope: { modify: ["src/billing/**", "!src/billing/invoice.ts"], read_only: [] }
+    };
+    const readmeChange = parseUnifiedDiff("M\0README.md\0", "diff --git a/README.md b/README.md\n");
+    const findings = detectScope(readmeChange.changes, contract);
+    expect(findings).toContainEqual(
+      expect.objectContaining({ file: "README.md", rule: "outside_modify", severity: "warning" })
+    );
+
+    const invoiceChange = parseUnifiedDiff("M\0src/billing/invoice.ts\0", "diff --git a/src/billing/invoice.ts b/src/billing/invoice.ts\n");
+    const invoiceFindings = detectScope(invoiceChange.changes, contract);
+    expect(invoiceFindings).toContainEqual(
+      expect.objectContaining({ file: "src/billing/invoice.ts", rule: "outside_modify" })
+    );
+  });
+
+  it("treats .intent/** as implicitly read-only error even when scope.modify is **", () => {
+    const contract: Contract = {
+      ...baseContract,
+      scope: { modify: ["**"], read_only: [] }
+    };
+    const intentChange = parseUnifiedDiff("M\0.intent/contract.yaml\0", "diff --git a/.intent/contract.yaml b/.intent/contract.yaml\n");
+    const findings = detectScope(intentChange.changes, contract);
+    expect(findings).toContainEqual(
+      expect.objectContaining({ file: ".intent/contract.yaml", severity: "error", rule: "read_only" })
+    );
+  });
 });
 
 function parseFixture(file: string, status: string) {

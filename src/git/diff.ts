@@ -21,9 +21,15 @@ export function parseNameStatus(output: string): NameStatusEntry[] {
       const oldFile = toRepoPath(fields[index++] ?? "");
       const newFile = toRepoPath(fields[index++] ?? "");
       entries.push({ status, file: newFile, oldFile, newFile });
+    } else if (status === "A") {
+      const file = toRepoPath(fields[index++] ?? "");
+      entries.push({ status, file, newFile: file });
+    } else if (status === "D") {
+      const file = toRepoPath(fields[index++] ?? "");
+      entries.push({ status, file, oldFile: file });
     } else {
       const file = toRepoPath(fields[index++] ?? "");
-      entries.push({ status, file, ...(status === "D" ? { oldFile: file } : { newFile: file }) });
+      entries.push({ status, file, oldFile: file, newFile: file });
     }
   }
   return entries;
@@ -56,25 +62,29 @@ export async function diffTrees(root: string, baselineTreeHash: string, currentT
     "diff", "-M", "-U3", "--no-ext-diff", "--no-textconv", "--no-color", baselineTreeHash, currentTreeHash, "--"
   ]);
   const parsed = parseUnifiedDiff(nameStatusOutput, patch);
-  for (const change of parsed.changes) {
-    if (change.binary) continue;
+  await Promise.all(parsed.changes.map(async (change) => {
+    if (change.binary) return;
+    const tasks: Promise<void>[] = [];
     if (change.oldFile && change.status !== "A" && change.status !== "C") {
-      change.beforeContent = await readTreeText(root, baselineTreeHash, change.oldFile);
+      tasks.push(readTreeText(root, baselineTreeHash, change.oldFile).then((text) => {
+        change.beforeContent = text;
+      }));
     }
     if (change.newFile && change.status !== "D") {
-      change.afterContent = await readTreeText(root, currentTreeHash, change.newFile);
+      tasks.push(readTreeText(root, currentTreeHash, change.newFile).then((text) => {
+        change.afterContent = text;
+      }));
     }
-  }
+    await Promise.all(tasks);
+  }));
   return parsed;
 }
 
 async function readTreeText(root: string, treeHash: string, repoPath: string): Promise<string | undefined> {
   try {
     const objectId = `${treeHash}:${repoPath}`;
-    const size = Number((await gitText(root, ["cat-file", "-s", objectId])).trim());
-    if (!Number.isFinite(size) || size > 2 * 1024 * 1024) return undefined;
     const buffer = await gitBuffer(root, ["cat-file", "blob", objectId]);
-    if (buffer.includes(0)) return undefined;
+    if (buffer.length > 2 * 1024 * 1024 || buffer.includes(0)) return undefined;
     return buffer.toString("utf8");
   } catch {
     return undefined;

@@ -111,6 +111,81 @@ describe("test weakening detector", () => {
     expect(output).toContain("Required action:");
     expect(output).toContain("```diff");
   });
+
+  it("detects pytest.approx tolerances in scientific notation (rel=1e-6) and abs= widening", () => {
+    const diffRel = parseUnifiedDiff(
+      "M\0tests/test_rates.py\0",
+      "diff --git a/tests/test_rates.py b/tests/test_rates.py\n--- a/tests/test_rates.py\n+++ b/tests/test_rates.py\n@@ -5,1 +5,1 @@\n-assert rate == pytest.approx(1.0, rel=1e-6)\n+assert rate == pytest.approx(1.0, rel=0.5)\n"
+    );
+    const findingsRel = detectTestWeakening(diffRel.changes);
+    expect(findingsRel).toContainEqual(expect.objectContaining({
+      rule: "numeric_tolerance_widened",
+      file: "tests/test_rates.py"
+    }));
+
+    const diffAbs = parseUnifiedDiff(
+      "M\0tests/test_rates.py\0",
+      "diff --git a/tests/test_rates.py b/tests/test_rates.py\n--- a/tests/test_rates.py\n+++ b/tests/test_rates.py\n@@ -5,1 +5,1 @@\n-assert rate == pytest.approx(1.0, abs=1e-6)\n+assert rate == pytest.approx(1.0, abs=0.5)\n"
+    );
+    const findingsAbs = detectTestWeakening(diffAbs.changes);
+    expect(findingsAbs).toContainEqual(expect.objectContaining({
+      rule: "numeric_tolerance_widened",
+      file: "tests/test_rates.py"
+    }));
+  });
+
+  it("detects test exclusions in test runner config (vitest.config.ts)", () => {
+    const diff = parseUnifiedDiff(
+      "M\0vitest.config.ts\0",
+      "diff --git a/vitest.config.ts b/vitest.config.ts\n--- a/vitest.config.ts\n+++ b/vitest.config.ts\n@@ -3,0 +3,1 @@\n+    exclude: ['**/billing/**'],\n"
+    );
+    const findings = detectTestWeakening(diff.changes);
+    expect(findings).toContainEqual(expect.objectContaining({
+      file: "vitest.config.ts",
+      detector: "test_weakening"
+    }));
+  });
+
+  it("detects Go tests t.Skip() and deleting _test.go files", () => {
+    const skipDiff = parseUnifiedDiff(
+      "M\0go/billing/billing_test.go\0",
+      "diff --git a/go/billing/billing_test.go b/go/billing/billing_test.go\n--- a/go/billing/billing_test.go\n+++ b/go/billing/billing_test.go\n@@ -5,0 +5,1 @@\n+\tt.Skip(\"temporarily skipped\")\n"
+    );
+    const skipFindings = detectTestWeakening(skipDiff.changes);
+    expect(skipFindings).toContainEqual(expect.objectContaining({
+      file: "go/billing/billing_test.go",
+      detector: "test_weakening"
+    }));
+
+    const delDiff = parseUnifiedDiff(
+      "D\0go/billing/billing_test.go\0",
+      "diff --git a/go/billing/billing_test.go b/go/billing/billing_test.go\ndeleted file mode 100644\n--- a/go/billing/billing_test.go\n+++ /dev/null\n@@ -1,5 +0,0 @@\n-package billing\n"
+    );
+    const delFindings = detectTestWeakening(delDiff.changes);
+    expect(delFindings).toContainEqual(expect.objectContaining({
+      rule: "deleted_test_file"
+    }));
+  });
+
+  it("recognises ESM/CJS test files (.test.mjs) and Java @Disabled", () => {
+    const delDiff = parseUnifiedDiff(
+      "D\0src/calc.test.mjs\0",
+      "diff --git a/src/calc.test.mjs b/src/calc.test.mjs\ndeleted file mode 100644\n--- a/src/calc.test.mjs\n+++ /dev/null\n@@ -1 +0,0 @@\n-test();\n"
+    );
+    const delFindings = detectTestWeakening(delDiff.changes);
+    expect(delFindings).toContainEqual(expect.objectContaining({
+      rule: "deleted_test_file"
+    }));
+
+    const javaDiff = parseUnifiedDiff(
+      "M\0src/test/BillingTest.java\0",
+      "diff --git a/src/test/BillingTest.java b/src/test/BillingTest.java\n--- a/src/test/BillingTest.java\n+++ b/src/test/BillingTest.java\n@@ -5,0 +5,1 @@\n+    @Disabled\n"
+    );
+    const javaFindings = detectTestWeakening(javaDiff.changes);
+    expect(javaFindings).toContainEqual(expect.objectContaining({
+      detector: "test_weakening"
+    }));
+  });
 });
 
 function parseFixture(fixture: string, nameStatus: string) {

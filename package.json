@@ -15,7 +15,8 @@
   },
   "categories": ["Other"],
   "activationEvents": [
-    "onStartupFinished"
+    "workspaceContains:.intent/*.yaml",
+    "workspaceContains:.intent/*.yml"
   ],
   "main": "./dist/extension.js",
   "bin": {
@@ -28,12 +29,38 @@
       { "command": "intentContract.recheck", "title": "Intent Contract: Re-check Now" },
       { "command": "intentContract.createTemplate", "title": "Intent Contract: Create Contract From Template" },
       { "command": "intentContract.copyViolations", "title": "Intent Contract: Copy Violations For Agent" },
-      { "command": "intentContract.revertFile", "title": "Intent Contract: Revert File to Baseline" },
-      { "command": "intentContract.waiveFinding", "title": "Intent Contract: Waive Finding" },
+      { "command": "intentContract.revertFile", "title": "Intent Contract: Revert File to Baseline", "icon": "$(discard)" },
+      { "command": "intentContract.waiveFinding", "title": "Intent Contract: Waive Finding", "icon": "$(pass)" },
       { "command": "intentContract.configureAgents", "title": "Intent Contract: Configure AI Agents & MCP" },
       { "command": "intentContract.exportArchitectureDrift", "title": "Intent Contract: Export Architecture Drift Diagram" },
-      { "command": "intentContract.openDiff", "title": "Intent Contract: Open Diff vs Baseline" }
+      { "command": "intentContract.openDiff", "title": "Intent Contract: Open Diff vs Baseline", "icon": "$(diff)" }
     ],
+    "configuration": {
+      "title": "Intent Contract",
+      "properties": {
+        "intentContract.debounce": {
+          "type": "number",
+          "default": 800,
+          "description": "Debounce delay in milliseconds before re-checking after file changes."
+        },
+        "intentContract.autoCheck": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically verify the contract when files change."
+        },
+        "intentContract.ignoredPaths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Additional glob patterns to ignore during contract verification."
+        },
+        "intentContract.severityOverrides": {
+          "type": "object",
+          "default": {},
+          "description": "Rule-specific severity overrides."
+        }
+      }
+    },
     "views": {
       "explorer": [
         {

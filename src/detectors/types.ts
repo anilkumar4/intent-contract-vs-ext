@@ -27,6 +27,10 @@ export interface Contract {
     node_mappings: Record<string, string[]>;
     default_policy: "deny_unlisted_edges";
   };
+  high_risk?: {
+    include?: string[];
+    exclude?: string[];
+  };
   forbid: Array<"new_dependencies" | "test_weakening" | "high_risk_files" | "architecture_drift">;
   allow_exceptions: boolean;
 }

@@ -1,3 +1,4 @@
+import path from "node:path";
 import picomatch from "picomatch";
 import type { FileChange, Finding } from "./types";
 import type { Contract } from "./types";
@@ -35,7 +36,7 @@ export function detectSymbolScope(changes: FileChange[], contract: Contract): Fi
     }
 
     for (const [name, evidence] of touched) {
-      if (allowedSymbols.has(name)) continue;
+      if (isSymbolAllowed(name, file, allowedSymbols)) continue;
       findings.push(makeFinding(
         "symbol_scope", file, "symbol_not_allowed", evidence.evidence, "error",
         `Changed symbol "${name}" is not listed in scope.modify_symbols`,
@@ -46,6 +47,29 @@ export function detectSymbolScope(changes: FileChange[], contract: Contract): Fi
   }
 
   return findings;
+}
+
+function isSymbolAllowed(symbolName: string, file: string, allowedSymbols: Set<string>): boolean {
+  if (allowedSymbols.has(symbolName)) return true;
+  const normalizedFile = file.replace(/\\/g, "/");
+  const baseName = path.posix.basename(normalizedFile);
+
+  for (const allowed of allowedSymbols) {
+    if (allowed.includes("::")) {
+      const [allowedPath, allowedSymbol] = allowed.split("::");
+      const pathMatches = picomatch.isMatch(normalizedFile, allowedPath, { dot: true }) ||
+        normalizedFile.endsWith(allowedPath) ||
+        baseName === allowedPath;
+      if (pathMatches && (allowedSymbol === symbolName || symbolName.endsWith("." + allowedSymbol))) {
+        return true;
+      }
+    } else if (allowed.includes(".")) {
+      if (symbolName === allowed || symbolName.endsWith("." + allowed)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function collectTouchedSymbols(
@@ -62,10 +86,10 @@ function collectTouchedSymbols(
     const owner = ranges
       .filter((range) => range.startLine <= line && range.endLine >= line)
       .sort((left, right) => (left.endLine - left.startLine) - (right.endLine - right.startLine))[0];
-    if (!owner) continue;
-    const existing = output.get(owner.name);
+    const name = owner ? owner.name : "<top_level>";
+    const existing = output.get(name);
     const evidence = `${changed.text}`;
-    if (!existing) output.set(owner.name, { line, evidence });
+    if (!existing) output.set(name, { line, evidence });
     else if (!existing.evidence.includes(evidence)) existing.evidence += `\n${evidence}`;
   }
 }
@@ -88,9 +112,9 @@ function collectHunkSymbols(
     const owner = ranges
       .filter((range) => range.startLine <= line && range.endLine >= line)
       .sort((left, right) => (left.endLine - left.startLine) - (right.endLine - right.startLine))[0];
-    if (!owner) continue;
-    const existing = output.get(owner.name);
-    if (!existing) output.set(owner.name, { line, evidence: changed.text });
+    const name = owner ? owner.name : "<top_level>";
+    const existing = output.get(name);
+    if (!existing) output.set(name, { line, evidence: changed.text });
     else if (!existing.evidence.includes(changed.text)) existing.evidence += `\n${changed.text}`;
   }
 }
@@ -101,11 +125,24 @@ function findSymbols(source: string, file: string): SymbolRange[] {
   if (file.endsWith(".py")) {
     const lines = source.split(/\r?\n/);
     let current: { name: string; indent: number; startLine: number } | undefined;
+    let currentClass: { name: string; indent: number } | undefined;
     for (let index = 0; index < lines.length; index += 1) {
+      const classMatch = /^(\s*)class\s+([A-Za-z_]\w*)/.exec(lines[index]);
+      if (classMatch) {
+        currentClass = { name: classMatch[2], indent: classMatch[1].length };
+      } else if (currentClass && lines[index].trim() && (/^\s*/.exec(lines[index])?.[0].length ?? 0) <= currentClass.indent) {
+        currentClass = undefined;
+      }
+
       const match = /^(\s*)(?:async\s+)?def\s+([A-Za-z_]\w*)\s*\(/.exec(lines[index]);
       if (match) {
         if (current) ranges.push({ ...current, endLine: index });
-        current = { name: match[2], indent: match[1].length, startLine: index + 1 };
+        const fnName = match[2];
+        const qualifiedName = currentClass ? `${currentClass.name}.${fnName}` : fnName;
+        current = { name: qualifiedName, indent: match[1].length, startLine: index + 1 };
+        if (currentClass) {
+          ranges.push({ name: fnName, startLine: index + 1, endLine: index + 1 });
+        }
       } else if (current && lines[index].trim() && !/^\s*#/.test(lines[index]) && (/^\s*/.exec(lines[index])?.[0].length ?? 0) <= current.indent) {
         ranges.push({ ...current, endLine: index });
         current = undefined;
@@ -115,7 +152,27 @@ function findSymbols(source: string, file: string): SymbolRange[] {
     return ranges;
   }
 
-  const functionPattern = /\b(?:async\s+)?function\s*\*?\s+([A-Za-z_$][\w$]*)\s*\(/g;
+  const classPattern = /\bclass\s+([A-Za-z_$][\w$]*)/g;
+  for (let match = classPattern.exec(masked); match; match = classPattern.exec(masked)) {
+    const className = match[1];
+    const bodyOpen = masked.indexOf("{", match.index);
+    if (bodyOpen < 0) continue;
+    const bodyClose = matchingChar(masked, bodyOpen, "{", "}");
+    if (bodyClose < 0) continue;
+    const classBody = masked.slice(bodyOpen, bodyClose + 1);
+    const methodPattern = /(?:(?:public|private|protected|static|readonly|async|get|set)\s+)*([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\s*\([^)]*\)\s*(?::\s*[^={\n]+)?\s*\{/g;
+    for (let m = methodPattern.exec(classBody); m; m = methodPattern.exec(classBody)) {
+      if (["constructor", "if", "for", "while", "switch"].includes(m[1])) continue;
+      const mOpen = bodyOpen + m.index + m[0].lastIndexOf("{");
+      const mClose = matchingChar(masked, mOpen, "{", "}");
+      if (mClose >= 0) {
+        ranges.push({ name: m[1], startLine: lineAt(source, bodyOpen + m.index), endLine: lineAt(source, mClose) });
+        ranges.push({ name: `${className}.${m[1]}`, startLine: lineAt(source, bodyOpen + m.index), endLine: lineAt(source, mClose) });
+      }
+    }
+  }
+
+  const functionPattern = /\b(?:export\s+)?(?:async\s+)?function\s*\*?\s+([A-Za-z_$][\w$]*)\s*(?:<[^>]*>)?\s*\(/g;
   for (let match = functionPattern.exec(masked); match; match = functionPattern.exec(masked)) {
     const openParen = masked.indexOf("(", match.index + match[0].lastIndexOf(match[1]) + match[1].length);
     const closeParen = matchingChar(masked, openParen, "(", ")");
@@ -125,12 +182,21 @@ function findSymbols(source: string, file: string): SymbolRange[] {
     if (bodyClose >= 0) ranges.push({ name: match[1], startLine: lineAt(source, match.index), endLine: lineAt(source, bodyClose) });
   }
 
-  const arrowPattern = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=\n]+)?=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*=>/g;
+  const arrowPattern = /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::\s*[^=\n]+)?\s*=\s*(?:async\s*)?(?:\([^)]*\)|[A-Za-z_$][\w$]*)\s*(?::\s*[^=]+?)?\s*=>/g;
   for (let match = arrowPattern.exec(masked); match; match = arrowPattern.exec(masked)) {
     const arrowEnd = match.index + match[0].length;
     const bodyOpen = masked[arrowEnd] === "{" ? arrowEnd : -1;
     const bodyClose = bodyOpen < 0 ? expressionEnd(masked, arrowEnd) : matchingChar(masked, bodyOpen, "{", "}");
     if (bodyClose >= 0) ranges.push({ name: match[1], startLine: lineAt(source, match.index), endLine: lineAt(source, bodyClose) });
+  }
+
+  const topVarPattern = /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::\s*[^=\n]+)?\s*=/g;
+  for (let match = topVarPattern.exec(masked); match; match = topVarPattern.exec(masked)) {
+    const varName = match[1];
+    if (!ranges.some((r) => r.name === varName)) {
+      const line = lineAt(source, match.index);
+      ranges.push({ name: varName, startLine: line, endLine: line });
+    }
   }
 
   return ranges;

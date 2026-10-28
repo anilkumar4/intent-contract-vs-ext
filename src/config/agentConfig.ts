@@ -27,7 +27,7 @@ export async function configureAgentIntegrations(
       await appendRuleFile(path.join(root, "CLAUDE.md"), agentRule);
       configured.push("Claude Code");
     } else if (integration === "copilot") {
-      await writeMcpConfig(path.join(root, ".mcp.json"), serverConfig(extensionPath, root));
+      await writeMcpConfig(path.join(root, ".vscode", "mcp.json"), serverConfig(extensionPath, root), "servers");
       await appendRuleFile(path.join(root, ".github", "copilot-instructions.md"), agentRule);
       configured.push("GitHub Copilot");
     } else if (integration === "precommit") {
@@ -38,7 +38,7 @@ export async function configureAgentIntegrations(
   return configured;
 }
 
-export function mergeMcpConfig(source: string | undefined, config: Record<string, unknown>): string {
+export function mergeMcpConfig(source: string | undefined, config: Record<string, unknown>, serversKey = "mcpServers"): string {
   let value: Record<string, unknown> = {};
   if (source?.trim()) {
     let parsed: unknown;
@@ -50,12 +50,12 @@ export function mergeMcpConfig(source: string | undefined, config: Record<string
     if (!isRecord(parsed)) throw new Error("Existing MCP config must contain a JSON object.");
     value = parsed;
   }
-  const currentServers = value.mcpServers;
+  const currentServers = value[serversKey];
   if (currentServers !== undefined && !isRecord(currentServers)) {
-    throw new Error("Existing MCP config field mcpServers must be a JSON object.");
+    throw new Error(`Existing MCP config field ${serversKey} must be a JSON object.`);
   }
   const servers = { ...(isRecord(currentServers) ? currentServers : {}), "intent-contract": config };
-  return JSON.stringify({ ...value, mcpServers: servers }, null, 2) + "\n";
+  return JSON.stringify({ ...value, [serversKey]: servers }, null, 2) + "\n";
 }
 
 export function upsertMarkedRule(source: string, rule: string): string {
@@ -70,10 +70,11 @@ export function upsertMarkedRule(source: string, rule: string): string {
   return source + separator + (source.length === 0 ? "" : "\n") + block + "\n";
 }
 
-export async function writeMcpConfig(filePath: string, config: Record<string, unknown>): Promise<void> {
+export async function writeMcpConfig(filePath: string, config: Record<string, unknown>, serversKey?: string): Promise<void> {
   await assertRegularFileOrMissing(filePath);
   const source = await readIfPresent(filePath);
-  const merged = mergeMcpConfig(source, config);
+  const key = serversKey ?? (filePath.replace(/\\/g, "/").includes(".vscode/mcp.json") ? "servers" : "mcpServers");
+  const merged = mergeMcpConfig(source, config, key);
   await fs.mkdir(path.dirname(filePath), { recursive: true });
   await fs.writeFile(filePath, merged, "utf8");
 }
@@ -101,10 +102,16 @@ export async function installPreCommitHook(root: string, cliPath: string): Promi
   const hookPath = path.resolve(root, (await gitText(root, ["rev-parse", "--path-format=absolute", "--git-path", "hooks/pre-commit"])).trim());
   await assertRegularFileOrMissing(hookPath);
   const existing = await readIfPresent(hookPath) ?? "";
+  const nodeExec = process.execPath ? shellQuote(process.execPath) : "node";
   const block = [
     START_MARKER,
     "if [ -f .intent/.state.json ]; then",
-    "  node " + shellQuote(cliPath) + " check",
+    "  NODE_BIN=\"node\"",
+    "  if ! command -v \"$NODE_BIN\" >/dev/null 2>&1; then",
+    "    NODE_BIN=" + nodeExec,
+    "    export ELECTRON_RUN_AS_NODE=1",
+    "  fi",
+    "  \"$NODE_BIN\" " + shellQuote(cliPath) + " check",
     "  intent_contract_status=$?",
     "  if [ \"$intent_contract_status\" -ne 0 ]; then exit \"$intent_contract_status\"; fi",
     "fi",
@@ -121,9 +128,17 @@ export async function installPreCommitHook(root: string, cliPath: string): Promi
 }
 
 export function serverConfig(extensionPath: string, workspace: string): Record<string, unknown> {
+  const unversionedPath = extensionPath.replace(/-\d+\.\d+\.\d+.*$/, "");
+  const serverPath = path.join(unversionedPath, "dist", "mcp-server.js");
+  const nodeBinary = process.execPath ? process.execPath : "node";
+  const env: Record<string, string> = {};
+  if (process.versions?.["electron"]) {
+    env["ELECTRON_RUN_AS_NODE"] = "1";
+  }
   return {
-    command: "node",
-    args: [path.join(extensionPath, "dist", "mcp-server.js"), "--workspace", workspace]
+    command: nodeBinary,
+    args: [serverPath, "--workspace", workspace],
+    ...(Object.keys(env).length > 0 ? { env } : {})
   };
 }
 

@@ -19,7 +19,25 @@ export function detectTautologicalTests(changes: FileChange[]): Finding[] {
   const findings: Finding[] = [];
   for (const change of changes) {
     const file = change.newFile ?? change.file;
-    if (change.status === "D" || !/\.(?:test|spec)\.(?:js|jsx|ts|tsx)$/i.test(file)) continue;
+    if (change.status === "D") continue;
+
+    const isPyTest = file.endsWith(".py") && (/(?:^|\/)tests?\//.test(file) || /(?:test_.+\.py|.+_test\.py)$/.test(file));
+    if (isPyTest && change.afterContent !== undefined) {
+      const blocks = findPythonTestBlocks(change.afterContent);
+      for (const block of blocks) {
+        if (!block.hasAssertion) {
+          findings.push(makeFinding(
+            "tautological_tests", file, "assertion_free_test", `def ${block.name}(): (contains no assertion)`, "error",
+            `Assertion-Free Test: "${block.name}" contains no assertion`,
+            block.line,
+            "Add an assertion that verifies the behavior under test. Calling the implementation alone does not prove the expected result."
+          ));
+        }
+      }
+      continue;
+    }
+
+    if (!/\.(?:test|spec)\.(?:js|jsx|ts|tsx|mjs|cjs|mts|cts)$/i.test(file)) continue;
 
     const analyses: Array<{ lines: DiffHunkLine[]; tokens: Token[]; blocks: TestBlock[]; changedNames: Set<string> }> = [];
     if (change.afterContent !== undefined) {
@@ -287,4 +305,38 @@ function evidenceAt(lines: DiffHunkLine[], line: number): string {
 
 function dedupe(findings: Finding[]): Finding[] {
   return [...new Map(findings.map((finding) => [finding.id, finding])).values()];
+}
+
+function findPythonTestBlocks(content: string): Array<{ name: string; line: number; changed: boolean; hasAssertion: boolean }> {
+  const lines = content.split(/\r?\n/);
+  const blocks: Array<{ name: string; line: number; changed: boolean; hasAssertion: boolean }> = [];
+  let current: { name: string; line: number; indent: number; bodyLines: string[] } | undefined;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const rawLine = lines[index];
+    const match = /^(\s*)(?:async\s+)?def\s+(test_[A-Za-z0-9_]*)\s*\(/.exec(rawLine);
+    if (match) {
+      if (current) {
+        const hasAssertion = current.bodyLines.some((l) => /\b(?:assert|pytest\.raises|self\.assert)\b/.test(l));
+        blocks.push({ name: current.name, line: current.line, changed: true, hasAssertion });
+      }
+      current = { name: match[2], line: index + 1, indent: match[1].length, bodyLines: [] };
+    } else if (current) {
+      if (rawLine.trim() && !/^\s*#/.test(rawLine)) {
+        const currentIndent = (/^\s*/.exec(rawLine)?.[0].length ?? 0);
+        if (currentIndent <= current.indent) {
+          const hasAssertion = current.bodyLines.some((l) => /\b(?:assert|pytest\.raises|self\.assert)\b/.test(l));
+          blocks.push({ name: current.name, line: current.line, changed: true, hasAssertion });
+          current = undefined;
+        } else {
+          current.bodyLines.push(rawLine);
+        }
+      }
+    }
+  }
+  if (current) {
+    const hasAssertion = current.bodyLines.some((l) => /\b(?:assert|pytest\.raises|self\.assert)\b/.test(l));
+    blocks.push({ name: current.name, line: current.line, changed: true, hasAssertion });
+  }
+  return blocks;
 }

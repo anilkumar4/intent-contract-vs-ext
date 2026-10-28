@@ -69,6 +69,32 @@ describe("MCP stdio JSON-RPC protocol", () => {
       findings: [expect.objectContaining({ detector: "architecture_drift", file: "src/billing/invoice.ts" })]
     });
   }, 30_000);
+
+  it("negotiates supported protocol version in initialize instead of echoing unsupported versions", async () => {
+    const root = await createRepository();
+    const response = JSON.parse((await handleRpcMessage(JSON.stringify({
+      jsonrpc: "2.0",
+      id: 20,
+      method: "initialize",
+      params: { protocolVersion: "2099-01-01" }
+    }), root)) ?? "{}") as { result: { protocolVersion: string } };
+
+    expect(response.result.protocolVersion).toBe("2024-11-05");
+  });
+
+  it("guards start_intent_contract when a session is already active", async () => {
+    const root = await createRepository();
+    await startIntentContract(root, "test");
+    const response = JSON.parse((await handleRpcMessage(JSON.stringify({
+      jsonrpc: "2.0",
+      id: 21,
+      method: "tools/call",
+      params: { name: "start_intent_contract", arguments: { name: "test" } }
+    }), root)) ?? "{}") as { result: { isError: boolean; content: Array<{ text: string }> } };
+
+    expect(response.result.isError).toBe(true);
+    expect(response.result.content[0].text).toContain("session is already active");
+  });
 });
 
 async function createRepository(): Promise<string> {

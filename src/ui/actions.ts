@@ -63,6 +63,11 @@ export async function revertFindingFile(finding: Finding | undefined, context: A
 export async function waiveFinding(finding: Finding | undefined, context: ActionContext): Promise<void> {
   const root = context.getRoot();
   if (!root) return;
+  const session = context.getSession();
+  if (!session) {
+    void vscode.window.showWarningMessage("No active Intent Contract session was found. Start a contract first.");
+    return;
+  }
   if (!context.getAllowExceptions()) {
     void vscode.window.showWarningMessage("This contract does not allow exceptions.");
     return;

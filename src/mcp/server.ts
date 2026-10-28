@@ -6,8 +6,10 @@ import {
   startIntentContract,
   verifyIntentContract
 } from "../runtime/contracts";
+import { readSession } from "../state/session";
 
 const MCP_PROTOCOL_VERSION = "2024-11-05";
+const SUPPORTED_PROTOCOL_VERSIONS = ["2024-11-05"];
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -40,8 +42,11 @@ export async function handleRpcMessage(message: string, root: string): Promise<s
     let result: unknown;
     if (request.method === "initialize") {
       const requestedVersion = request.params?.protocolVersion;
+      const protocolVersion = typeof requestedVersion === "string" && SUPPORTED_PROTOCOL_VERSIONS.includes(requestedVersion)
+        ? requestedVersion
+        : MCP_PROTOCOL_VERSION;
       result = {
-        protocolVersion: typeof requestedVersion === "string" ? requestedVersion : MCP_PROTOCOL_VERSION,
+        protocolVersion,
         capabilities: { tools: {} },
         serverInfo: { name: "intent-contract", version: "0.1.0" }
       };
@@ -125,6 +130,10 @@ async function callTool(root: string, params: Record<string, unknown>): Promise<
   }
   if (name === "start_intent_contract") {
     if (typeof args.name !== "string" || !args.name.trim()) throw new Error("name must identify a contract in .intent/.");
+    const session = await readSession(root);
+    if (session) {
+      throw new Error("An Intent Contract session is already active. Agents cannot re-start contracts or re-baseline away active violations.");
+    }
     const active = await startIntentContract(root, args.name.trim());
     return toolResult({ started: true, name: active.contract.name, path: active.path, startedAt: active.session.startedAt });
   }

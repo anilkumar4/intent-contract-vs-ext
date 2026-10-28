@@ -51,6 +51,23 @@ describe("tautological test detector", () => {
       message: expect.stringContaining("Assertion-Free Test")
     }));
   });
+
+  it("reports Python assertion-free tests in test files", () => {
+    const pyChange: FileChange = {
+      status: "M",
+      file: "tests/test_rates.py",
+      additions: [],
+      deletions: [],
+      binary: false,
+      afterContent: "def test_rates():\n    calculate_rate()\n"
+    };
+    const findings = detectTautologicalTests([pyChange]);
+    expect(findings).toContainEqual(expect.objectContaining({
+      file: "tests/test_rates.py",
+      detector: "tautological_tests",
+      rule: "assertion_free_test"
+    }));
+  });
 });
 
 function addedTest(source: string): FileChange {

@@ -69,6 +69,22 @@ describe("contract loading", () => {
     ].join("\n"))).toThrow(/architecture is required/);
   });
 
+  it("accepts custom high_risk configuration", () => {
+    const contract = parseContract([
+      "name: custom-risk",
+      "intent: Custom high-risk patterns",
+      "scope:",
+      "  modify: [src/**]",
+      "high_risk:",
+      "  include: [\"helm/**\", \"db/migrations/**\"]",
+      "  exclude: [\".env.example\"]"
+    ].join("\n"));
+    expect(contract.high_risk).toEqual({
+      include: ["helm/**", "db/migrations/**"],
+      exclude: [".env.example"]
+    });
+  });
+
   it("creates the default contract and ignores generated session metadata", async () => {
     const root = await createTempDirectory();
     const created = await createDefaultContract(root);

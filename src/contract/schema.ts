@@ -13,6 +13,10 @@ export const contractSchema = z.object({
     node_mappings: z.record(z.string().trim().min(1), z.array(z.string().trim().min(1)).min(1)),
     default_policy: z.literal("deny_unlisted_edges")
   }).strict().optional(),
+  high_risk: z.object({
+    include: z.array(z.string().trim().min(1)).default([]),
+    exclude: z.array(z.string().trim().min(1)).default([])
+  }).strict().optional(),
   forbid: z.array(z.enum(["new_dependencies", "test_weakening", "high_risk_files", "architecture_drift"])).default([]),
   allow_exceptions: z.boolean().default(false)
 }).strict().superRefine((contract, context) => {

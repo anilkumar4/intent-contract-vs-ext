@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import path from "node:path";
 import fs from "node:fs/promises";
+import picomatch from "picomatch";
 import { createDefaultContract, ensureIntentMetadataIgnored } from "./contract/template";
 import { discoverContracts, loadContract, parseContract } from "./contract/loader";
 import type { Contract } from "./contract/schema";
@@ -30,6 +31,7 @@ let changes: FileChange[] = [];
 let waivers = new Map<string, Waiver>();
 let checkRunning = false;
 let checkQueued = false;
+let queuedResolvers: Array<() => void> = [];
 let checkTimer: ReturnType<typeof setTimeout> | undefined;
 let statusBar: ContractStatusBar;
 let treeProvider: FindingsTreeProvider;
@@ -95,11 +97,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const watcher = vscode.workspace.createFileSystemWatcher("**/*");
   const scheduleCheck = (): void => {
+    const config = vscode.workspace.getConfiguration("intentContract");
+    if (config.get<boolean>("autoCheck", true) === false) return;
+    const debounceMs = config.get<number>("debounce", 800);
     if (checkTimer) clearTimeout(checkTimer);
     checkTimer = setTimeout(() => {
       checkTimer = undefined;
       void runCheck();
-    }, 800);
+    }, debounceMs);
   };
   context.subscriptions.push(
     watcher,
@@ -167,7 +172,7 @@ async function startContract(): Promise<void> {
   };
   contract = await loadContractFromBaseline(repoRoot, session);
   await writeSession(repoRoot, session);
-  void vscode.window.showInformationMessage(`Started contract “${selectedContract.name}” from the current working tree.`);
+  void vscode.window.showInformationMessage(`Started contract "${selectedContract.name}" from the current working tree.`);
   await runCheck();
 }
 
@@ -237,15 +242,25 @@ async function configureAgents(context: vscode.ExtensionContext): Promise<void> 
 
 async function runCheck(): Promise<void> {
   checkQueued = true;
-  if (checkRunning) return;
+  if (checkRunning) {
+    return new Promise<void>((resolve) => {
+      queuedResolvers.push(resolve);
+    });
+  }
   checkRunning = true;
   try {
     while (checkQueued) {
       checkQueued = false;
+      const currentResolvers = queuedResolvers;
+      queuedResolvers = [];
       await performCheck();
+      for (const resolve of currentResolvers) resolve();
     }
   } finally {
     checkRunning = false;
+    const remaining = queuedResolvers;
+    queuedResolvers = [];
+    for (const resolve of remaining) resolve();
   }
 }
 
@@ -362,25 +377,48 @@ async function restoreSession(): Promise<void> {
 }
 
 async function workspaceRepositoryRoot(showError = true): Promise<string | undefined> {
-  const folder = vscode.workspace.workspaceFolders?.[0];
-  if (!folder) {
+  const folders = vscode.workspace.workspaceFolders;
+  if (!folders || folders.length === 0) {
     if (showError) void vscode.window.showErrorMessage("Open a Git repository folder before starting an Intent Contract.");
     return undefined;
   }
-  try {
-    return await findRepositoryRoot(folder.uri.fsPath);
-  } catch {
-    if (showError) void vscode.window.showErrorMessage("The current workspace is not inside a Git repository.");
-    return undefined;
+  const activeUri = vscode.window.activeTextEditor?.document.uri;
+  if (activeUri && activeUri.scheme === "file") {
+    const activeFolder = vscode.workspace.getWorkspaceFolder(activeUri);
+    if (activeFolder) {
+      try {
+        return await findRepositoryRoot(activeFolder.uri.fsPath);
+      } catch {
+        // Fall back to scanning folders
+      }
+    }
   }
+  for (const folder of folders) {
+    try {
+      return await findRepositoryRoot(folder.uri.fsPath);
+    } catch {
+      continue;
+    }
+  }
+  if (showError) void vscode.window.showErrorMessage("The current workspace is not inside a Git repository.");
+  return undefined;
 }
 
 function isIgnored(uri: vscode.Uri): boolean {
   if (!root || uri.scheme !== "file") return true;
   const relative = path.relative(root, uri.fsPath).replace(/\\/g, "/");
   if (!relative || relative === ".." || relative.startsWith("../") || path.isAbsolute(relative)) return true;
-  return relative === ".intent/.violations.md" ||
-    relative.split("/").some((part) => part === ".git" || part === "node_modules");
+  if (relative === ".intent/.violations.md" || relative === ".intent/.state.json" || relative.startsWith(".git/")) return true;
+  const segments = relative.split("/");
+  if (segments.some((part) => part === ".git" || part === "node_modules" || part === "dist" || part === "out" || part === "build")) {
+    return true;
+  }
+  const config = vscode.workspace.getConfiguration("intentContract");
+  const userIgnored = config.get<string[]>("ignoredPaths", []);
+  if (userIgnored && userIgnored.length > 0) {
+    if (userIgnored.some((pattern) => picomatch.isMatch(relative, pattern.replace(/\\/g, "/"), { dot: true }))) return true;
+  }
+  return false;
 }
 
 async function chooseCurrentFinding(): Promise<Finding | undefined> {

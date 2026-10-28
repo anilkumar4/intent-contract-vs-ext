@@ -1,8 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { parse } from "yaml";
 import { discoverContracts, loadContract, parseContract } from "../contract/loader";
 import { ensureIntentMetadataIgnored } from "../contract/template";
-import { detectFindings, detectFindingsForWorkspace } from "../detectors";
+import { detectFindingsForWorkspace } from "../detectors";
 import type { Contract, Finding, ParsedDiff } from "../detectors/types";
 import { diffTrees } from "../git/diff";
 import { gitBuffer, gitText } from "../git/cli";
@@ -11,6 +12,7 @@ import { revertFileToBaseline } from "../git/revert";
 import { readSession, removeSession, writeSession, type ContractSession } from "../state/session";
 import { readWaivers } from "../state/waivers";
 import { formatFindingsForAgent } from "../state/formatViolations";
+import { writeViolationSummary } from "../state/violations";
 import { toRepoPath } from "../util/paths";
 
 export interface ContractSummary {
@@ -48,7 +50,7 @@ export async function verifyIntentContract(
   if (options.base) {
     policyTree = (await gitText(root, ["rev-parse", "--verify", options.base + "^{tree}"])).trim();
   } else if (session) {
-    policyTree = session.baselineTreeHash;
+    policyTree = session.originalBaselineTreeHash ?? session.baselineTreeHash;
   } else {
     policyTree = (await gitText(root, ["rev-parse", "--verify", "HEAD^{tree}"])).trim();
   }
@@ -63,8 +65,13 @@ export async function verifyIntentContract(
   const currentTree = await createWorkingTreeSnapshot(root);
   const diff = await diffTrees(root, policyTree, currentTree);
   const allFindings = await detectFindingsForWorkspace(root, policyTree, diff, contract, contractFile);
-  const waivers = await readWaivers(root);
+  const waivers = contract.allow_exceptions ? await readWaivers(root) : new Map();
   const findings = allFindings.filter((finding) => !waivers.has(finding.id));
+  try {
+    await writeViolationSummary(root, allFindings, waivers);
+  } catch {
+    // Ignore if directory cannot be written
+  }
   const errorCount = findings.filter((finding) => finding.severity === "error").length;
   const warningCount = findings.filter((finding) => finding.severity === "warning").length;
   return {
@@ -79,28 +86,57 @@ export async function verifyIntentContract(
   };
 }
 
-export async function startIntentContract(root: string, name: string): Promise<ContractSummary> {
+export async function startIntentContract(
+  root: string,
+  name: string,
+  options: { force?: boolean } = {}
+): Promise<ContractSummary> {
   const files = await discoverContracts(root);
   const candidates: Array<{ file: string; contract: Contract }> = [];
+  const invalidMatches: Array<{ file: string; message: string }> = [];
   for (const file of files) {
+    const baseName = path.basename(file, path.extname(file));
     try {
       const contract = await loadContract(file);
-      if (contract.name === name || path.basename(file, path.extname(file)) === name) {
+      if (contract.name === name || baseName === name) {
         candidates.push({ file, contract });
       }
-    } catch {
-      // Ignore invalid contracts when looking up a named valid contract.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (baseName === name) {
+        invalidMatches.push({ file, message });
+      } else {
+        try {
+          const raw = await fs.readFile(file, "utf8");
+          const parsed = parse(raw) as Record<string, unknown> | null;
+          if (parsed && typeof parsed === "object" && parsed.name === name) {
+            invalidMatches.push({ file, message });
+          }
+        } catch {
+          // Ignore
+        }
+      }
     }
   }
-  if (candidates.length === 0) throw new Error("No valid contract named “" + name + "” was found in .intent/.");
-  if (candidates.length > 1) throw new Error("More than one contract matches “" + name + "”. Use a unique contract name or filename.");
+  if (candidates.length === 0) {
+    if (invalidMatches.length > 0) {
+      throw new Error(`Contract "${name}" is invalid: ${invalidMatches[0].message}`);
+    }
+    throw new Error("No valid contract named \"" + name + "\" was found in .intent/.");
+  }
+  if (candidates.length > 1) {
+    throw new Error("More than one contract matches \"" + name + "\". Use a unique contract name or filename.");
+  }
 
   const previous = await readSession(root);
   if (previous) await releaseBaseline(root, previous.baselineRef);
   await ensureIntentMetadataIgnored(root);
   const relative = toRepoPath(path.relative(root, candidates[0].file));
   const snapshot = await captureBaseline(root);
-  const session: ContractSession = { ...snapshot, activeContract: relative };
+  const originalBaselineTreeHash = options.force
+    ? snapshot.baselineTreeHash
+    : (previous?.originalBaselineTreeHash ?? previous?.baselineTreeHash ?? snapshot.baselineTreeHash);
+  const session: ContractSession = { ...snapshot, activeContract: relative, originalBaselineTreeHash };
   await writeSession(root, session);
   await unlinkIfPresent(path.join(root, ".intent", ".violations.md"));
   const baselineYaml = (await gitBuffer(root, ["cat-file", "blob", snapshot.baselineTreeHash + ":" + relative])).toString("utf8");
@@ -118,10 +154,11 @@ export async function revertOutOfScopeFiles(root: string, files?: string[]): Pro
   const session = await readSession(root);
   if (!session) throw new Error("No active Intent Contract session was found.");
   const summary = await getActiveContract(root);
+  const policyTree = session.originalBaselineTreeHash ?? session.baselineTreeHash;
   const currentTree = await createWorkingTreeSnapshot(root);
-  const diff = await diffTrees(root, session.baselineTreeHash, currentTree);
-  const findings = detectFindings(diff, summary.contract).filter((finding) => finding.detector === "scope");
-  const violatingFiles = new Set(findings.map((finding) => finding.file));
+  const diff = await diffTrees(root, policyTree, currentTree);
+  const allFindings = await detectFindingsForWorkspace(root, policyTree, diff, summary.contract, summary.path);
+  const violatingFiles = new Set(allFindings.map((finding) => finding.file));
   const requested = files?.map((file) => normalizeContractPath(file, root));
   if (requested) {
     const invalid = requested.filter((file) => !violatingFiles.has(file));
@@ -131,7 +168,7 @@ export async function revertOutOfScopeFiles(root: string, files?: string[]): Pro
   for (const file of selected) {
     const change = diff.changes.find((item) => item.file === file || item.oldFile === file || item.newFile === file);
     if (!change) continue;
-    await revertFileToBaseline(root, session.baselineTreeHash, change);
+    await revertFileToBaseline(root, policyTree, change);
   }
   return selected;
 }
@@ -140,11 +177,12 @@ export async function revertIntentFile(root: string, file: string): Promise<void
   const session = await readSession(root);
   if (!session) throw new Error("No active Intent Contract session was found.");
   const repoPath = normalizeContractPath(file, root);
+  const policyTree = session.originalBaselineTreeHash ?? session.baselineTreeHash;
   const currentTree = await createWorkingTreeSnapshot(root);
-  const diff = await diffTrees(root, session.baselineTreeHash, currentTree);
+  const diff = await diffTrees(root, policyTree, currentTree);
   const change = diff.changes.find((item) => item.file === repoPath || item.oldFile === repoPath || item.newFile === repoPath);
   if (!change) throw new Error("The file has no changes relative to the active baseline: " + repoPath);
-  await revertFileToBaseline(root, session.baselineTreeHash, change);
+  await revertFileToBaseline(root, policyTree, change);
 }
 
 export function normalizeContractPath(value: string, root = process.cwd()): string {

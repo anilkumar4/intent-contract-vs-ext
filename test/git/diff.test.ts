@@ -24,6 +24,13 @@ describe("Git diff parsing", () => {
     ]);
   });
 
+  it("sets oldFile and newFile for modified files so beforeContent can be loaded", () => {
+    const entries = parseNameStatus("M\0package.json\0");
+    expect(entries).toEqual([
+      { status: "M", file: "package.json", oldFile: "package.json", newFile: "package.json" }
+    ]);
+  });
+
   it("preserves changed source lines that begin with plus or minus characters", () => {
     const parsed = parseUnifiedDiff(
       "M\0src/signs.ts\0",

@@ -30,10 +30,11 @@ export async function runCli(argv: string[], workingDirectory = process.cwd()): 
   try {
     const root = await findRepositoryRoot(workspace);
     if (command === "start") {
-      const name = filtered[1];
-      if (!name) throw new Error("Usage: intent-contract start <contract-name>");
-      const started = await startIntentContract(root, name);
-      process.stdout.write("Started contract “" + started.contract.name + "” from " + started.path + ".\n");
+      const force = filtered.includes("--force") || filtered.includes("-f");
+      const name = filtered.find((arg, idx) => idx > 0 && !arg.startsWith("-"));
+      if (!name) throw new Error("Usage: intent-contract start <contract-name> [--force]");
+      const started = await startIntentContract(root, name, { force });
+      process.stdout.write("Started contract \"" + started.contract.name + "\" from " + started.path + ".\n");
       return 0;
     }
     if (command === "check") {
@@ -126,7 +127,7 @@ function requireValue(args: string[], index: number, option: string): string {
 function writeUsage(): void {
   process.stdout.write(
     "Intent Contract CLI\n\n" +
-    "  intent-contract start <contract-name>\n" +
+    "  intent-contract start <contract-name> [--force]\n" +
     "  intent-contract check [--base <git-ref>] [--contract <path>] [--format text|json|github]\n" +
     "  intent-contract revert <file>\n" +
     "  intent-contract stop\n" +
