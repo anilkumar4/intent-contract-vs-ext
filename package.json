@@ -68,6 +68,11 @@
         "command": "intentContract.openDiff",
         "title": "Intent Contract: Open Diff vs Baseline",
         "icon": "$(diff)"
+      },
+      {
+        "command": "intentContract.openGuide",
+        "title": "Intent Contract: Open Vibe Coding Guide",
+        "icon": "$(book)"
       }
     ],
     "configuration": {
@@ -109,6 +114,13 @@
       ]
     },
     "menus": {
+      "view/title": [
+        {
+          "command": "intentContract.openGuide",
+          "when": "view == intentContractFindings",
+          "group": "navigation"
+        }
+      ],
       "view/item/context": [
         {
           "command": "intentContract.openDiff",

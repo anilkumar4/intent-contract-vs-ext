@@ -146,6 +146,20 @@ describe("headless CLI", () => {
     const secondCheck = await verifyIntentContract(root);
     expect(secondCheck.findings).toContainEqual(expect.objectContaining({ id: finding!.id, severity: "error" }));
   });
+
+  it("prints vibe coding guide overview and exits cleanly", async () => {
+    const root = await createRepository();
+    const output: string[] = [];
+    vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {
+      output.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+      return true;
+    }) as typeof process.stdout.write);
+
+    const code = await runCli(["guide"], root);
+    expect(code).toBe(0);
+    expect(output.join("")).toContain("Intent Contract Vibe Coding Guide:");
+    expect(output.join("")).toContain("vibe-coding-guide.md");
+  });
 });
 
 async function createRepository(): Promise<string> {

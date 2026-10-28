@@ -25,6 +25,8 @@ interface FindingNode {
 interface EmptyNode {
   kind: "empty";
   message: string;
+  command?: vscode.Command;
+  icon?: vscode.ThemeIcon;
 }
 
 export class FindingsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
@@ -55,7 +57,10 @@ export class FindingsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
       return item;
     }
     if (element.kind === "empty") {
-      return new vscode.TreeItem(element.message, vscode.TreeItemCollapsibleState.None);
+      const item = new vscode.TreeItem(element.message, vscode.TreeItemCollapsibleState.None);
+      if (element.command) item.command = element.command;
+      if (element.icon) item.iconPath = element.icon;
+      return item;
     }
     const { finding, waiver } = element;
     const item = new vscode.TreeItem(finding.message, vscode.TreeItemCollapsibleState.None);
@@ -96,7 +101,36 @@ export class FindingsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([file, items]) => ({ kind: "file", file, findings: items }));
     if (waivedFindings.length > 0) roots.push({ kind: "waivedGroup", findings: waivedFindings, waivers: this.waivers });
-    if (roots.length === 0) roots.push({ kind: "empty", message: this.active ? "No active findings" : "Start a contract to monitor changes" });
+    if (roots.length === 0) {
+      if (this.active) {
+        roots.push({
+          kind: "empty",
+          message: "No active findings",
+          icon: new vscode.ThemeIcon("check")
+        });
+      } else {
+        roots.push(
+          {
+            kind: "empty",
+            message: "Start a Contract...",
+            icon: new vscode.ThemeIcon("play"),
+            command: { command: "intentContract.start", title: "Start Contract" }
+          },
+          {
+            kind: "empty",
+            message: "Create Contract Template...",
+            icon: new vscode.ThemeIcon("add"),
+            command: { command: "intentContract.createTemplate", title: "Create Contract Template" }
+          },
+          {
+            kind: "empty",
+            message: "Open Vibe Coding Guide...",
+            icon: new vscode.ThemeIcon("book"),
+            command: { command: "intentContract.openGuide", title: "Open Vibe Coding Guide" }
+          }
+        );
+      }
+    }
     return roots;
   }
 

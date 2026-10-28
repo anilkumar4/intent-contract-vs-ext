@@ -40,8 +40,10 @@ let diagnostics: FindingDiagnostics;
 let architecturePreviewText = "";
 let architecturePreviewEmitter: vscode.EventEmitter<vscode.Uri>;
 let architecturePreviewUri: vscode.Uri;
+let extensionContext: vscode.ExtensionContext | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  extensionContext = context;
   output = vscode.window.createOutputChannel("Intent Contract");
   statusBar = new ContractStatusBar();
   treeProvider = new FindingsTreeProvider();
@@ -84,6 +86,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("intentContract.configureAgents", () => configureAgents(context)),
     vscode.commands.registerCommand("intentContract.exportArchitectureDrift", () => exportArchitectureDriftDiagram()),
     vscode.commands.registerCommand("intentContract.openDiff", async (value?: unknown) => openFindingDiff(unwrapFinding(value) ?? await chooseCurrentFinding(), actionContext)),
+    vscode.commands.registerCommand("intentContract.openGuide", () => openVibeCodingGuide(context)),
     vscode.commands.registerCommand("intentContract.revertFile", async (value?: unknown) => revertFindingFile(unwrapFinding(value) ?? await chooseCurrentFinding(), actionContext)),
     vscode.commands.registerCommand("intentContract.waiveFinding", (value?: unknown) => waiveFinding(unwrapFinding(value), actionContext)),
     vscode.commands.registerCommand("intentContract.statusClick", async () => {
@@ -121,10 +124,42 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   await restoreSession();
+
+  const extensionVersion = (context.extension?.packageJSON as { version?: string } | undefined)?.version ?? "0.3.0";
+  const lastSeenVersion = context.globalState.get<string>("lastSeenGuideVersion");
+  if (lastSeenVersion !== extensionVersion) {
+    void context.globalState.update("lastSeenGuideVersion", extensionVersion);
+    void vscode.window.showInformationMessage(
+      `Welcome to Intent Contract v${extensionVersion}! Guard your workspace during vibe coding with autonomous agents.`,
+      "Open Guide",
+      "Create Contract Template"
+    ).then(async (action) => {
+      if (action === "Open Guide") {
+        await openVibeCodingGuide(context);
+      } else if (action === "Create Contract Template") {
+        await createTemplate();
+      }
+    });
+  }
 }
 
 export function deactivate(): void {
   if (checkTimer) clearTimeout(checkTimer);
+}
+
+async function openVibeCodingGuide(context: vscode.ExtensionContext): Promise<void> {
+  const guidePath = context.asAbsolutePath("docs/vibe-coding-guide.md");
+  const uri = vscode.Uri.file(guidePath);
+  try {
+    await vscode.commands.executeCommand("markdown.showPreview", uri);
+  } catch {
+    try {
+      const doc = await vscode.workspace.openTextDocument(uri);
+      await vscode.window.showTextDocument(doc);
+    } catch {
+      void vscode.env.openExternal(vscode.Uri.parse("https://github.com/anilkumar4/intent-contract-vs-ext/blob/master/docs/vibe-coding-guide.md"));
+    }
+  }
 }
 
 async function startContract(): Promise<void> {
@@ -138,9 +173,11 @@ async function startContract(): Promise<void> {
   if (files.length === 0) {
     const choice = await vscode.window.showInformationMessage(
       "No contract YAML files were found in .intent/.",
-      "Create Contract From Template"
+      "Create Contract From Template",
+      "Open Vibe Coding Guide"
     );
-    if (choice) await createTemplate();
+    if (choice === "Create Contract From Template") await createTemplate();
+    else if (choice === "Open Vibe Coding Guide" && extensionContext) await openVibeCodingGuide(extensionContext);
     return;
   }
   let selected = files[0];

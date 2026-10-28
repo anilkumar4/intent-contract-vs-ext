@@ -70,6 +70,22 @@ export async function runCli(argv: string[], workingDirectory = process.cwd()): 
       }
       throw new Error("Usage: intent-contract hook install");
     }
+    if (command === "guide") {
+      process.stdout.write(
+        "Intent Contract Vibe Coding Guide:\n\n" +
+        "Read the complete guide online:\n" +
+        "  https://github.com/anilkumar4/intent-contract-vs-ext/blob/master/docs/vibe-coding-guide.md\n\n" +
+        "Quick Workflow:\n" +
+        "  1. Define task boundary:   .intent/<feature>.yaml\n" +
+        "  2. Lock baseline snapshot: intent-contract start <feature>\n" +
+        "  3. Install safety hooks:   intent-contract hook install\n" +
+        "  4. Vibe code freely with:  Cursor, Claude Code, Copilot, or Antigravity\n" +
+        "  5. Check violations:       intent-contract check\n" +
+        "  6. Stage & push safely:    intent-contract check --index && git push\n" +
+        "  7. Conclude session:       intent-contract stop\n"
+      );
+      return 0;
+    }
     throw new Error("Unknown command: " + command);
   } catch (error) {
     process.stderr.write("intent-contract: " + (error instanceof Error ? error.message : String(error)) + "\n");
@@ -148,6 +164,7 @@ function writeUsage(): void {
     "  intent-contract check [--base <git-ref>] [--contract <path>] [--format text|json|github] [--index | --revision <commit>]\n" +
     "  intent-contract revert <file>\n" +
     "  intent-contract hook install\n" +
+    "  intent-contract guide\n" +
     "  intent-contract stop\n" +
     "  intent-contract --workspace <repo-path> <command>\n"
   );
