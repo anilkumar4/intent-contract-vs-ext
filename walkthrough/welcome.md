@@ -14,3 +14,4 @@ However, autonomous agents introduce critical failure modes that standard linter
 Intent Contract locks a pristine Git baseline, evaluates changes in the background, and gives you real-time non-blocking diagnostics and one-click reverts.
 
 [Open Vibe Coding Guide](command:intentContract.openGuide)
+

@@ -11,3 +11,4 @@ When you start an Intent Contract session:
 Ready to begin?
 
 [Start Contract Session](command:intentContract.start)
+

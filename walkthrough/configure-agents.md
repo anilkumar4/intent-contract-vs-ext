@@ -12,3 +12,4 @@ Intent Contract integrates directly with all major AI assistants:
 - **Git Hooks**: Installs `pre-commit` and `pre-push` hooks that verify the exact commit SHA being pushed and abort pushes if active violations exist.
 
 [Configure AI Agents & Hooks](command:intentContract.configureAgents)
+

@@ -12,3 +12,4 @@ As your AI agent writes code:
 - **Guarded Push**: `git push` is verified by the `pre-push` hook, ensuring broken or unapproved changes never reach remote branches.
 
 [Open Intent Contract Sidebar](command:workbench.view.extension.intent-contract-sidebar)
+

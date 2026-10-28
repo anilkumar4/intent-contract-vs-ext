@@ -17,3 +17,4 @@ Before starting an AI coding session, declare the task boundary in `.intent/<fea
 You never have to hand-code YAML. Use the built-in **Visual Contract Builder**:
 
 [Open Visual Contract Builder](command:intentContract.visualBuilder)
+
