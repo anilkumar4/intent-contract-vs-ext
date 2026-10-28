@@ -104,7 +104,31 @@ export async function waiveFinding(finding: Finding | undefined, context: Action
     reason = input.trim();
   }
 
-  await addWaiver(root, { id: selected.id, reason: reason.trim(), timestamp: new Date().toISOString() });
+  const ttlOptions = [
+    { label: "Permanent", description: "Never expires", ms: 0 },
+    { label: "1 Hour", description: "Temporary exception for quick experiment", ms: 3600 * 1000 },
+    { label: "24 Hours (1 Day)", description: "Auto-reopens after 24 hours", ms: 24 * 3600 * 1000 },
+    { label: "7 Days (1 Week)", description: "Standard sprint cycle exception", ms: 7 * 24 * 3600 * 1000 },
+    { label: "30 Days", description: "Monthly audit cycle exception", ms: 30 * 24 * 3600 * 1000 }
+  ];
+
+  const ttlPick = await vscode.window.showQuickPick(ttlOptions, {
+    placeHolder: "Select waiver duration / time-to-live (TTL)"
+  });
+  if (!ttlPick) return;
+
+  const timestamp = new Date().toISOString();
+  let expires_at: string | undefined;
+  if (ttlPick.ms > 0) {
+    expires_at = new Date(Date.now() + ttlPick.ms).toISOString();
+  }
+
+  await addWaiver(root, {
+    id: selected.id,
+    reason: reason.trim(),
+    timestamp,
+    ...(expires_at ? { expires_at } : {})
+  });
   await context.refresh();
 }
 

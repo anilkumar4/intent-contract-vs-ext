@@ -5,6 +5,14 @@ export interface Waiver {
   id: string;
   reason: string;
   timestamp: string;
+  expires_at?: string;
+}
+
+export function isWaiverActive(waiver: Waiver, now = Date.now()): boolean {
+  if (!waiver.expires_at) return true;
+  const expiry = Date.parse(waiver.expires_at);
+  if (Number.isNaN(expiry)) return true;
+  return now < expiry;
 }
 
 export async function readWaivers(root: string): Promise<Map<string, Waiver>> {
@@ -29,8 +37,22 @@ export async function readWaivers(root: string): Promise<Map<string, Waiver>> {
   }
 }
 
-export async function readWaiversForContract(root: string, allowExceptions: boolean): Promise<Map<string, Waiver>> {
-  return allowExceptions ? readWaivers(root) : new Map();
+export async function readWaiversForContract(
+  root: string,
+  allowExceptions: boolean,
+  includeExpired = false
+): Promise<Map<string, Waiver>> {
+  if (!allowExceptions) return new Map();
+  const all = await readWaivers(root);
+  if (includeExpired) return all;
+  const active = new Map<string, Waiver>();
+  const now = Date.now();
+  for (const [id, waiver] of all) {
+    if (isWaiverActive(waiver, now)) {
+      active.set(id, waiver);
+    }
+  }
+  return active;
 }
 
 export async function addWaiver(root: string, waiver: Waiver): Promise<void> {
@@ -47,7 +69,7 @@ function waiverPath(root: string): string {
 function isWaiver(value: unknown): value is Waiver {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as Record<string, unknown>;
-  return (
+  const validBase = (
     typeof candidate.id === "string" &&
     candidate.id.trim().length > 0 &&
     typeof candidate.reason === "string" &&
@@ -55,6 +77,13 @@ function isWaiver(value: unknown): value is Waiver {
     typeof candidate.timestamp === "string" &&
     !Number.isNaN(Date.parse(candidate.timestamp))
   );
+  if (!validBase) return false;
+  if (candidate.expires_at !== undefined) {
+    if (typeof candidate.expires_at !== "string" || Number.isNaN(Date.parse(candidate.expires_at))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function isMissing(error: unknown): boolean {

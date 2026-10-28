@@ -132,17 +132,17 @@ The main entry point. Lifecycle:
 | **Status Bar HUD** | [`statusBar.ts`](src/ui/statusBar.ts) & [`extension.ts`](src/extension.ts) | Left-aligned item showing `$(shield) Contract: name · N violations`. Clicking launches an interactive command HUD for starting/ending sessions, dashboard navigation, reports, and switching contracts. |
 | **Scope & Context Helpers** | [`scopeHelpers.ts`](src/ui/scopeHelpers.ts) | Right-click editor and explorer actions (`Add Symbol to Scope`, `Add File to Scope`, `Mark File Read-Only`) with live Git baseline sync (`updateContractInBaseline`). |
 | **Baseline Provider** | [`baselineContentProvider.ts`](src/ui/baselineContentProvider.ts) | `intent-baseline://` URI scheme providing baseline file content for VS Code diff views. |
-| **Actions & Smart Waivers** | [`actions.ts`](src/ui/actions.ts) | `openDiff()`, `revertFile()` (with modal confirmation), `waiveFinding()` (with smart justification templates), `copyFindingsForAgent()`. |
+| **Actions & Smart Waivers** | [`actions.ts`](src/ui/actions.ts) | `openDiff()`, `revertFile()` (with modal confirmation), `waiveFinding()` (with smart templates & TTL duration picker), `copyFindingsForAgent()`. |
 
 ### 7. State Management — `src/state/`
 
 | File | Format | Purpose |
 |------|--------|---------|
 | [`session.ts`](src/state/session.ts) | `.intent/.state.json` | Persists `baselineTreeHash`, `originalBaselineTreeHash`, optional `originalBaselineRef`, `headSha`, `startedAt`, `baselineRef`, and `activeContract`. Survives VS Code restarts. |
-| [`waivers.ts`](src/state/waivers.ts) | `.intent/waivers.json` | Array of `{id, reason, timestamp}`. Waived findings are excluded from active counts. |
+| [`waivers.ts`](src/state/waivers.ts) | `.intent/waivers.json` | Array of `{id, reason, timestamp, expires_at?}`. Implements time-to-live (TTL) expiration; expired waivers automatically re-open findings. |
 | [`violations.ts`](src/state/violations.ts) | `.intent/.violations.md` | Refreshed on every check; markdown formatted for agent consumption. |
 | [`formatViolations.ts`](src/state/formatViolations.ts) | — | Formats findings as structured remediation instructions with diff evidence and action items. |
-| [`report.ts`](src/state/report.ts) | `.intent/reports/*.md` | Generates verified Markdown AI Safety certificates with 5-dimension scorecard, modified files ledger, and cryptographic Git audit seals. |
+| [`report.ts`](src/state/report.ts) | `.intent/reports/*.md` | Generates verified Markdown AI Safety certificates, vector SVG badges, and GitHub/GitLab PR comments with cryptographic Git audit seals. |
 
 ### 8. Runtime — `src/runtime/contracts.ts`
 
@@ -155,11 +155,11 @@ Headless operations shared by CLI and MCP (no VS Code dependency):
 
 ### 9. CLI — `src/cli/index.ts`
 
-Commands: `start <name> [--force]`, `check [--base --contract --index --revision --format]`, `report [--output <path>]`, `revert <file>`, `hook install`, `guide`, `stop`.
+Commands: `start <name> [--force]`, `check [--base --contract --index --revision --format]`, `report [--output <path>] [--badge <path>] [--pr-comment <path>]`, `revert <file>`, `hook install`, `guide`, `stop`.
 - `--index` checks staged content; `--revision <sha>` checks a local commit tree. They cannot be combined and require an active session.
 - `--base origin/main` uses a Git ref as the policy tree (for CI without active sessions).
 - `--format github` outputs `::error file=...,line=...::message` annotations.
-- `report [--output <path>]` exports AI safety compliance certificates.
+- `report [--output <path>] [--badge <path>] [--pr-comment <path>]` exports AI safety compliance certificates, SVG badges, and PR comments.
 - Automatically appends rich Markdown compliance reports and summary banners to `$GITHUB_STEP_SUMMARY` when running in GitHub Actions CI runners.
 - Exit code 1 on unwaived error findings.
 

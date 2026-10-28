@@ -64,6 +64,39 @@ describe("waivers management", () => {
     expect((await readWaiversForContract(root, true)).has("persisted-finding")).toBe(true);
     expect((await readWaiversForContract(root, false)).size).toBe(0);
   });
+
+  it("handles waiver TTL and filters out expired waivers", async () => {
+    const root = await createTempDir();
+    const past = new Date(Date.now() - 3600 * 1000).toISOString();
+    const future = new Date(Date.now() + 3600 * 1000).toISOString();
+
+    await addWaiver(root, {
+      id: "expired-finding",
+      reason: "Expired temporary waiver",
+      timestamp: new Date().toISOString(),
+      expires_at: past
+    });
+    await addWaiver(root, {
+      id: "active-finding",
+      reason: "Active temporary waiver",
+      timestamp: new Date().toISOString(),
+      expires_at: future
+    });
+    await addWaiver(root, {
+      id: "permanent-finding",
+      reason: "Permanent waiver",
+      timestamp: new Date().toISOString()
+    });
+
+    const activeWaivers = await readWaiversForContract(root, true);
+    expect(activeWaivers.has("expired-finding")).toBe(false);
+    expect(activeWaivers.has("active-finding")).toBe(true);
+    expect(activeWaivers.has("permanent-finding")).toBe(true);
+
+    const allWaivers = await readWaiversForContract(root, true, true);
+    expect(allWaivers.has("expired-finding")).toBe(true);
+    expect(allWaivers.has("active-finding")).toBe(true);
+  });
 });
 
 async function createTempDir(): Promise<string> {

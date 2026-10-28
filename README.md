@@ -90,7 +90,7 @@ The build produces `dist/cli.js` and `dist/mcp-server.js` alongside the VS Code 
     node dist/cli.js check [--base origin/main] [--contract .intent/default.yaml] [--format text|json|github]
     node dist/cli.js check --index
     node dist/cli.js check --revision <local-commit-sha>
-    node dist/cli.js report [--output <path>]
+    node dist/cli.js report [--output <path>] [--badge <path>] [--pr-comment <path>]
     node dist/cli.js revert src/example.ts
     node dist/cli.js hook install
     node dist/cli.js guide

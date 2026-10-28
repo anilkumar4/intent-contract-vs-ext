@@ -3,6 +3,10 @@ dist/
 dist-test/
 .vscode-test/
 *.vsix
+*.zip
+*intent-*test*
+*intent-contract*
+.*intent-contract*
 .intent/.state.json
 .intent/.violations.md
 .intent/waivers.json

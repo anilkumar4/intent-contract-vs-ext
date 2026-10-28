@@ -99,4 +99,32 @@ describe("Session compliance report generator", () => {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
+
+  it("exports an SVG badge and PR comment when requested", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "intent-report-badge-test-"));
+    try {
+      const badgePath = path.join(root, "badge.svg");
+      const prCommentPath = path.join(root, "pr-comment.md");
+
+      await generateComplianceReport({
+        root,
+        session: sampleSession,
+        contract: sampleContract,
+        changes: [],
+        findings: [],
+        waivers: new Map()
+      }, { badgePath, prCommentPath });
+
+      const badgeContent = await fs.readFile(badgePath, "utf8");
+      expect(badgeContent).toContain("<svg");
+      expect(badgeContent).toContain("passing");
+      expect(badgeContent).toContain("#2ea44f");
+
+      const prCommentContent = await fs.readFile(prCommentPath, "utf8");
+      expect(prCommentContent).toContain("Intent Contract CI Report: ✅ PASSED");
+      expect(prCommentContent).toContain("All changesets strictly satisfy task scope");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
 });

@@ -183,6 +183,44 @@ export async function markFileReadOnly(
   void vscode.window.showInformationMessage(`Marked "${relative}" as read_only in ${parsed.name ?? target.repoPath}.`);
 }
 
+export async function addPathPatternToScope(
+  root: string,
+  session: ContractSession | undefined,
+  onReload: () => Promise<void>,
+  pattern: string,
+  mode: "modify" | "read_only"
+): Promise<void> {
+  const target = await resolveContractFile(root, session);
+  if (!target) return;
+
+  const contractAbsPath = path.join(root, target.repoPath);
+  const rawYaml = await fs.readFile(contractAbsPath, "utf8");
+  const parsed = (parse(rawYaml) ?? {}) as ScopeContract;
+
+  if (!parsed.scope) parsed.scope = {};
+  if (!Array.isArray(parsed.scope.modify)) parsed.scope.modify = [];
+  if (!Array.isArray(parsed.scope.read_only)) parsed.scope.read_only = [];
+
+  if (mode === "modify") {
+    parsed.scope.read_only = parsed.scope.read_only.filter((p) => p !== pattern);
+    if (!parsed.scope.modify.includes(pattern)) {
+      parsed.scope.modify.push(pattern);
+    }
+  } else {
+    parsed.scope.modify = parsed.scope.modify.filter((p) => p !== pattern);
+    if (!parsed.scope.read_only.includes(pattern)) {
+      parsed.scope.read_only.push(pattern);
+    }
+  }
+
+  await fs.writeFile(contractAbsPath, stringify(parsed), "utf8");
+
+  if (session && session.activeContract === target.repoPath) {
+    await syncBaselineContract(root, session, target.repoPath);
+    await onReload();
+  }
+}
+
 async function resolveContractFile(
   root: string,
   session: ContractSession | undefined

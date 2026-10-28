@@ -14,7 +14,63 @@ export interface ReportContext {
   waivers: Map<string, Waiver>;
 }
 
-export async function generateComplianceReport(ctx: ReportContext): Promise<string> {
+export interface ReportOptions {
+  badgePath?: string;
+  prCommentPath?: string;
+}
+
+export function generateBadgeSvg(passed: boolean): string {
+  const status = passed ? "passing" : "failing";
+  const color = passed ? "#2ea44f" : "#cb2431";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="168" height="20" role="img" aria-label="Intent Contract: ${status}">
+  <linearGradient id="s" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="r">
+    <rect width="168" height="20" rx="3" fill="#fff"/>
+  </clipPath>
+  <g clip-path="url(#r)">
+    <rect width="102" height="20" fill="#555"/>
+    <rect x="102" width="66" height="20" fill="${color}"/>
+    <rect width="168" height="20" fill="url(#s)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
+    <text aria-hidden="true" x="520" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)">Intent Contract</text>
+    <text x="520" y="140" transform="scale(.1)" fill="#fff">Intent Contract</text>
+    <text aria-hidden="true" x="1340" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)">${status}</text>
+    <text x="1340" y="140" transform="scale(.1)" fill="#fff">${status}</text>
+  </g>
+</svg>
+`;
+}
+
+export function generatePrCommentMarkdown(ctx: ReportContext): string {
+  const activeFindings = ctx.findings.filter((f) => !ctx.waivers.has(f.id));
+  const activeErrors = activeFindings.filter((f) => f.severity === "error");
+  const isCompliant = activeErrors.length === 0;
+
+  return `## 🛡️ Intent Contract CI Report: ${isCompliant ? "✅ PASSED" : "❌ FAILED"}
+
+[![Intent Contract: ${isCompliant ? "passing" : "failing"}](https://img.shields.io/badge/Intent%20Contract-${isCompliant ? "passing-success" : "failing-critical"}.svg)](#)
+
+- **Contract**: \`${ctx.contract.name}\` — *${escapeMd(ctx.contract.intent)}*
+- **Modified Files**: \`${ctx.changes.length}\`
+- **Active Errors**: \`${activeErrors.length}\`
+- **Active Warnings**: \`${activeFindings.length - activeErrors.length}\`
+- **Waivers Granted**: \`${ctx.waivers.size}\`
+
+${activeFindings.length === 0 ? "> 🎉 **All changesets strictly satisfy task scope and safety guardrails.**" : `
+### ⚠️ Outstanding Violations
+| Severity | Detector | File | Message |
+|:---:|---|---|---|
+${activeFindings.slice(0, 10).map((f) => `| ${f.severity === "error" ? "🛑 Error" : "⚠️ Warning"} | \`${f.detector}\` | \`${f.file}${f.line ? `:${f.line}` : ""}\` | ${escapeMd(f.message)} |`).join("\n")}
+${activeFindings.length > 10 ? `\n*... and ${activeFindings.length - 10} more findings. Inspect the full report for details.*` : ""}
+`}
+`;
+}
+
+export async function generateComplianceReport(ctx: ReportContext, options?: ReportOptions): Promise<string> {
   const reportsDir = path.join(ctx.root, ".intent", "reports");
   await fs.mkdir(reportsDir, { recursive: true });
 
@@ -107,9 +163,14 @@ ${activeFindings.map((f) => `| ${f.severity === "error" ? "🛑 Error" : "⚠️
 ## 5. Authorized Exceptions & Waivers (${ctx.waivers.size})
 
 ${ctx.waivers.size === 0 ? "_No exceptions or waivers were granted for this session._" : `
-| Finding ID | Waiver Reason | Authorized Timestamp |
-|---|---|---|
-${Array.from(ctx.waivers.values()).map((w) => `| \`${w.id.slice(0, 12)}...\` | ${escapeMd(w.reason)} | \`${w.timestamp}\` |`).join("\n")}
+| Finding ID | Waiver Reason | Expiration / TTL | Authorized Timestamp |
+|---|---|---|---|
+${Array.from(ctx.waivers.values()).map((w) => {
+  const status = w.expires_at
+    ? (Date.now() > Date.parse(w.expires_at) ? `⚠️ Expired (\`${w.expires_at}\`)` : `Active (Expires: \`${w.expires_at}\`)`)
+    : "Permanent";
+  return `| \`${w.id.slice(0, 12)}...\` | ${escapeMd(w.reason)} | ${status} | \`${w.timestamp}\` |`;
+}).join("\n")}
 `}
 
 ---
@@ -121,11 +182,22 @@ Algorithm: SHA-1 / SHA-256 Git Tree Hash
 Policy Tree: ${policyTreeHash(ctx.session)}
 Baseline Snapshot: ${ctx.session.baselineTreeHash}
 Verification Timestamp: ${timestamp}
-Audited by: Intent Contract v0.3.0 Engine
+Audited by: Intent Contract Engine
 \`\`\`
 `;
 
   await fs.writeFile(reportPath, markdown, "utf8");
+
+  if (options?.badgePath) {
+    await fs.mkdir(path.dirname(options.badgePath), { recursive: true });
+    await fs.writeFile(options.badgePath, generateBadgeSvg(isCompliant), "utf8");
+  }
+
+  if (options?.prCommentPath) {
+    await fs.mkdir(path.dirname(options.prCommentPath), { recursive: true });
+    await fs.writeFile(options.prCommentPath, generatePrCommentMarkdown(ctx), "utf8");
+  }
+
   return reportPath;
 }
 

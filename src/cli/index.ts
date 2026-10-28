@@ -82,6 +82,16 @@ export async function runCli(argv: string[], workingDirectory = process.cwd()): 
       if (outputIndex >= 0 && filtered[outputIndex + 1]) {
         outputPath = path.resolve(workspace, filtered[outputIndex + 1]);
       }
+      let badgePath: string | undefined;
+      const badgeIndex = filtered.indexOf("--badge");
+      if (badgeIndex >= 0 && filtered[badgeIndex + 1]) {
+        badgePath = path.resolve(workspace, filtered[badgeIndex + 1]);
+      }
+      let prCommentPath: string | undefined;
+      const prIndex = filtered.indexOf("--pr-comment");
+      if (prIndex >= 0 && filtered[prIndex + 1]) {
+        prCommentPath = path.resolve(workspace, filtered[prIndex + 1]);
+      }
       const existing = await readSession(root);
       if (!existing) {
         throw new Error("No active Intent Contract session was found. Start a contract session before exporting a report.");
@@ -101,7 +111,7 @@ export async function runCli(argv: string[], workingDirectory = process.cwd()): 
         changes: diff.changes,
         findings: allFindings,
         waivers
-      });
+      }, { badgePath, prCommentPath });
 
       if (outputPath) {
         await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -238,7 +248,7 @@ function writeUsage(): void {
     "Intent Contract CLI\n\n" +
     "  intent-contract start <contract-name> [--force]\n" +
     "  intent-contract check [--base <git-ref>] [--contract <path>] [--format text|json|github] [--index | --revision <commit>]\n" +
-    "  intent-contract report [--output <path>]\n" +
+    "  intent-contract report [--output <path>] [--badge <path>] [--pr-comment <path>]\n" +
     "  intent-contract revert <file>\n" +
     "  intent-contract hook install\n" +
     "  intent-contract guide\n" +

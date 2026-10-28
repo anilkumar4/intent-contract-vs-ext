@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.0] - 2026-10-28
+
+### Added
+- **Automated Waiver Expiry / Time-To-Live (TTL)**:
+  - Added optional `expires_at` ISO date property to `Waiver` interface in `src/state/waivers.ts`.
+  - Added `isWaiverActive` helper ensuring expired waivers automatically re-open active error findings across extension, CLI, and MCP checks.
+  - Interactive duration picker in VS Code waiver workflow (`Permanent`, `1 Hour`, `24 Hours`, `7 Days`, `30 Days`).
+  - Active and expired waiver status tracking in Session Compliance Reports.
+- **AI Safety CI Badge & PR Comment Generator**:
+  - Added `generateBadgeSvg(passed)` to generate vector SVG badges (`passing` in green vs `failing` in red).
+  - Added `generatePrCommentMarkdown(ctx)` for automated Pull Request comment formatting in GitHub Actions and GitLab CI.
+  - Added `--badge <path>` and `--pr-comment <path>` flags to `intent-contract report` CLI command.
+- **Interactive Architecture Diagram Node Scoping**:
+  - In Visual Contract Builder (`src/ui/visualBuilder.ts`), selecting an architecture diagram dynamically discovers all architecture nodes and provides 1-click `+ Modify` and `🔒 Read-Only` scoping shortcuts, auto-generating `node_mappings`.
+  - In Visual Architecture Drift Inspector (`src/ui/architectureInspector.ts`), added an interactive Architecture Nodes table with direct `+ Add to Scope` and `🔒 Lock Read-Only` actions that dynamically update the active contract baseline in Git via `updateContractInBaseline`.
+
+---
+
 ## [0.3.0] - 2026-10-28
 
 ### Added

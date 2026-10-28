@@ -186,6 +186,28 @@ describe("headless CLI", () => {
       delete process.env.GITHUB_STEP_SUMMARY;
     }
   });
+
+  it("exports report, badge, and PR comment via CLI flags", async () => {
+    const root = await createRepository();
+    await runCli(["start", "test"], root);
+
+    const outReport = path.join(root, "custom_report.md");
+    const outBadge = path.join(root, "custom_badge.svg");
+    const outComment = path.join(root, "custom_comment.md");
+
+    const code = await runCli(["report", "--output", outReport, "--badge", outBadge, "--pr-comment", outComment], root);
+    expect(code).toBe(0);
+
+    const reportContent = await fs.readFile(outReport, "utf8");
+    expect(reportContent).toContain("Intent Contract AI Safety & Compliance Certificate");
+
+    const badgeContent = await fs.readFile(outBadge, "utf8");
+    expect(badgeContent).toContain("<svg");
+    expect(badgeContent).toContain("Intent Contract");
+
+    const commentContent = await fs.readFile(outComment, "utf8");
+    expect(commentContent).toContain("Intent Contract CI Report:");
+  });
 });
 
 async function createRepository(): Promise<string> {

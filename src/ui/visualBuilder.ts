@@ -5,6 +5,18 @@ import YAML from "yaml";
 import { findRepositoryRoot } from "../git/cli";
 import { ensureIntentMetadataIgnored } from "../contract/template";
 import { contractSchema, type Contract } from "../contract/schema";
+import { parseArchitectureDiagram } from "../architecture/diagramParser";
+
+export interface DiscoveredDiagramNode {
+  id: string;
+  label: string;
+  paths: string[];
+}
+
+export interface DiscoveredDiagram {
+  path: string;
+  nodes: DiscoveredDiagramNode[];
+}
 
 export class VisualContractBuilderPanel {
   public static currentPanel: VisualContractBuilderPanel | undefined;
@@ -98,8 +110,8 @@ export class VisualContractBuilderPanel {
     return await findRepositoryRoot(folders[0].uri.fsPath);
   }
 
-  private async discoverDiagrams(root: string): Promise<string[]> {
-    const results: string[] = [];
+  private async discoverDiagrams(root: string): Promise<DiscoveredDiagram[]> {
+    const results: DiscoveredDiagram[] = [];
     const searchDirs = ["docs", "architecture", ".intent", "."];
     for (const subDir of searchDirs) {
       try {
@@ -107,7 +119,19 @@ export class VisualContractBuilderPanel {
         const entries = await fs.readdir(dirPath, { withFileTypes: true });
         for (const entry of entries) {
           if (entry.isFile() && (entry.name.endsWith(".mmd") || entry.name.endsWith(".drawio") || entry.name.endsWith(".dio"))) {
-            results.push(path.relative(root, path.join(dirPath, entry.name)).replace(/\\/g, "/"));
+            const relPath = path.relative(root, path.join(dirPath, entry.name)).replace(/\\/g, "/");
+            const nodes: DiscoveredDiagramNode[] = [];
+            try {
+              const content = await fs.readFile(path.join(dirPath, entry.name), "utf8");
+              const graph = parseArchitectureDiagram(relPath, content);
+              for (const [id, node] of graph.nodes) {
+                const inferred = node.globs && node.globs.length > 0 ? node.globs : [`src/${id.toLowerCase()}/**`];
+                nodes.push({ id, label: node.label || id, paths: inferred });
+              }
+            } catch {
+              // ignore parse errors
+            }
+            results.push({ path: relPath, nodes });
           }
         }
       } catch {
@@ -259,7 +283,7 @@ export class VisualContractBuilderPanel {
     return lines.join("\n");
   }
 
-  private renderHtml(context: { diagrams: string[]; activeSymbols: string[]; detectedFolders: string[] }): string {
+  private renderHtml(context: { diagrams: DiscoveredDiagram[]; activeSymbols: string[]; detectedFolders: string[] }): string {
     const symbolBadges = context.activeSymbols.map(
       (s) => `<button type="button" class="badge-btn" onclick="addSymbol('${escapeHtml(s)}')">+ ${escapeHtml(s)}</button>`
     ).join(" ");
@@ -270,7 +294,7 @@ export class VisualContractBuilderPanel {
 
     const diagramOptions = [
       `<option value="">None (skip architecture drift)</option>`,
-      ...context.diagrams.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`)
+      ...context.diagrams.map((d) => `<option value="${escapeHtml(d.path)}">${escapeHtml(d.path)} (${d.nodes.length} nodes)</option>`)
     ].join("");
 
     return `<!DOCTYPE html>
@@ -429,6 +453,37 @@ export class VisualContractBuilderPanel {
     .btn-secondary:hover {
       opacity: 0.9;
     }
+    .node-cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .node-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .node-card-title {
+      font-weight: 600;
+      font-size: 12px;
+      color: var(--accent);
+    }
+    .node-card-paths {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      font-family: monospace;
+      word-break: break-all;
+    }
+    .node-card-actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 4px;
+    }
   </style>
 </head>
 <body>
@@ -508,7 +563,12 @@ export class VisualContractBuilderPanel {
     <div class="form-group" id="diagramGroup" style="display: none;">
       <label for="diagram">Architecture Diagram</label>
       <div class="hint">Select a diagram from your repository to enforce:</div>
-      <select id="diagram">${diagramOptions}</select>
+      <select id="diagram" onchange="renderSelectedDiagramNodes()">${diagramOptions}</select>
+      <div id="diagramNodesSection" style="margin-top: 12px; display: none;">
+        <label>Diagram Nodes & Scoping Shortcuts</label>
+        <div class="hint">Click to add node paths to modify scope or lock as read-only:</div>
+        <div id="diagramNodesContainer" class="node-cards-grid"></div>
+      </div>
     </div>
 
     <div class="form-group">
@@ -536,13 +596,55 @@ export class VisualContractBuilderPanel {
 
   <script>
     const vscode = acquireVsCodeApi();
+    const diagramsData = ${JSON.stringify(context.diagrams)};
 
     const archDriftCheckbox = document.getElementById('forbidArchDrift');
     const diagramGroup = document.getElementById('diagramGroup');
 
     archDriftCheckbox.addEventListener('change', () => {
       diagramGroup.style.display = archDriftCheckbox.checked ? 'block' : 'none';
+      if (archDriftCheckbox.checked) {
+        renderSelectedDiagramNodes();
+      }
     });
+
+    function renderSelectedDiagramNodes() {
+      const select = document.getElementById('diagram');
+      const container = document.getElementById('diagramNodesContainer');
+      const section = document.getElementById('diagramNodesSection');
+      const selectedPath = select.value;
+      const diagram = diagramsData.find(d => d.path === selectedPath);
+
+      if (!diagram || !diagram.nodes || diagram.nodes.length === 0) {
+        section.style.display = 'none';
+        container.innerHTML = '';
+        return;
+      }
+
+      section.style.display = 'block';
+      container.innerHTML = diagram.nodes.map(function(n) {
+        var pathsJson = JSON.stringify(n.paths).replace(/"/g, '&quot;');
+        return '<div class="node-card">' +
+          '<div class="node-card-title">Node: ' + (n.label || n.id) + '</div>' +
+          '<div class="node-card-paths">' + n.paths.join(', ') + '</div>' +
+          '<div class="node-card-actions">' +
+            '<button type="button" class="badge-btn" onclick="addNodePaths(' + pathsJson + ', \\'modify\\')">+ Modify</button>' +
+            '<button type="button" class="badge-btn" onclick="addNodePaths(' + pathsJson + ', \\'readOnly\\')">🔒 Read-Only</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    function addNodePaths(paths, targetId) {
+      const textarea = document.getElementById(targetId);
+      const lines = textarea.value.split('\\n').map(l => l.trim()).filter(Boolean);
+      for (const p of paths) {
+        if (!lines.includes(p)) {
+          lines.push(p);
+        }
+      }
+      textarea.value = lines.join('\\n');
+    }
 
     function addModifyPath(path) {
       const textarea = document.getElementById('modify');
@@ -600,16 +702,24 @@ export class VisualContractBuilderPanel {
       };
 
       if (archDriftCheckbox.checked) {
-        const diagram = document.getElementById('diagram').value;
-        if (!diagram) {
+        const diagramPath = document.getElementById('diagram').value;
+        if (!diagramPath) {
           alert('Please select an architecture diagram or uncheck Enforce Architecture Boundaries.');
           return null;
         }
+        const diagram = diagramsData.find(d => d.path === diagramPath);
+        const nodeMappings = {};
+        if (diagram && diagram.nodes && diagram.nodes.length > 0) {
+          for (const n of diagram.nodes) {
+            nodeMappings[n.id] = n.paths;
+          }
+        } else {
+          nodeMappings['App'] = modifyLines;
+        }
+
         payload.architecture = {
-          diagram,
-          node_mappings: {
-            App: modifyLines
-          },
+          diagram: diagramPath,
+          node_mappings: nodeMappings,
           default_policy: 'deny_unlisted_edges'
         };
       }

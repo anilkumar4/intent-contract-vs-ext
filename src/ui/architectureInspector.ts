@@ -4,6 +4,7 @@ import type { Contract } from "../contract/schema";
 import type { ContractSession } from "../state/session";
 import type { ArchitectureAnalysis } from "../detectors/architectureDrift";
 import { renderArchitectureDriftDiagram } from "../detectors/architectureDrift";
+import { addPathPatternToScope } from "./scopeHelpers";
 
 export interface ArchitectureInspectorContext {
   root: string | undefined;
@@ -106,6 +107,23 @@ export class ArchitectureInspectorPanel {
           case "exportDiagram":
             void vscode.commands.executeCommand("intentContract.exportArchitectureDrift");
             break;
+          case "scopeNode": {
+            const nodeMsg = message as { command: string; node?: string; mode?: "modify" | "read_only" };
+            if (nodeMsg.node) {
+              const ctx = this.getContext();
+              if (ctx.root && ctx.contract) {
+                const paths = ctx.contract.architecture?.node_mappings?.[nodeMsg.node] ?? [`src/${nodeMsg.node.toLowerCase()}/**`];
+                for (const p of paths) {
+                  await addPathPatternToScope(ctx.root, ctx.session, this.onRecheck, p, nodeMsg.mode ?? "modify");
+                }
+                await this.refresh();
+                void vscode.window.showInformationMessage(
+                  `Updated contract baseline: Node "${nodeMsg.node}" mapped to ${nodeMsg.mode === "modify" ? "modify scope" : "read-only"}.`
+                );
+              }
+            }
+            break;
+          }
         }
       },
       null,
@@ -530,6 +548,43 @@ ${mermaidSrc}
         </table>
       `}
     </div>
+
+    ${analysis && analysis.graph.nodes.size > 0 ? `
+      <div class="panel-section">
+        <div class="section-header">
+          <div class="section-title">
+            <span>📐</span> Architecture Nodes & Dynamic Scope Controls (${nodeCount})
+          </div>
+        </div>
+        <table class="violations-table">
+          <thead>
+            <tr>
+              <th>Architecture Node</th>
+              <th>Mapped File Globs</th>
+              <th>Dynamic Scope Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${Array.from(analysis.graph.nodes.values()).map((node) => {
+              const mapped = ctx.contract?.architecture?.node_mappings?.[node.id] ?? node.globs;
+              const displayPaths = mapped && mapped.length > 0 ? mapped.join(", ") : `src/${node.id.toLowerCase()}/**`;
+              return `
+                <tr>
+                  <td><span class="module-badge">${escapeHtml(node.label || node.id)}</span></td>
+                  <td><code>${escapeHtml(displayPaths)}</code></td>
+                  <td>
+                    <div style="display: flex; gap: 6px;">
+                      <button class="btn btn-primary" onclick="scopeNode('${escapeAttr(node.id)}', 'modify')">+ Add to Scope</button>
+                      <button class="btn" onclick="scopeNode('${escapeAttr(node.id)}', 'read_only')">🔒 Lock Read-Only</button>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : ""}
   `}
 
   <script>
@@ -542,6 +597,9 @@ ${mermaidSrc}
     }
     function revertFile(file) {
       vscode.postMessage({ command: 'revertFile', file: file });
+    }
+    function scopeNode(node, mode) {
+      vscode.postMessage({ command: 'scopeNode', node: node, mode: mode });
     }
   </script>
 </body>
