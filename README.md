@@ -39,10 +39,11 @@ The extension host must support the VS Code `extensionHost` debug configuration.
 
 ## Commands and baseline
 
-- **Configure AI Agents & MCP** adds the local stdio MCP server and agent instructions to selected Cursor, Antigravity, Claude Code, GitHub Copilot, and Git pre-commit configurations. Existing MCP servers and instruction text are preserved.
+- **Configure AI Agents & MCP** adds the local stdio MCP server and agent instructions to selected Cursor, Antigravity, Claude Code, GitHub Copilot, and Git pre-commit and pre-push hook configurations.
+- **Git Push & Commit Blocking**: Installing the Git hooks automatically verifies active contracts on `git commit` and `git push`, blocking pushes and commits whenever error findings exist until they are resolved or authorized waivers are recorded.
 - **Export Architecture Drift Diagram** writes **.intent/.architecture-drift.mmd** for the active architecture contract and opens a Mermaid Markdown preview. Official edges are green; unlisted code imports are dashed red and labeled as violations.
 - **Start Contract** captures the current working tree, including uncommitted and untracked files, using a temporary Git index. The actual index is left untouched.
-- **Re-check Now** compares the current tree with that snapshot. File-system changes and editor saves also trigger a check after about 800 ms.
+- **Re-check Now** compares the current tree with that snapshot. File-system changes and editor saves also trigger a check after the configured debounce interval.
 - **Revert File to Baseline** restores one changed file or removes one file that was added after the baseline.
 - **Waive Finding** records a required reason and timestamp in `.intent/waivers.json` when the contract allows exceptions.
 - **Copy Violations For Agent** copies active findings as corrective instructions. `.intent/.violations.md` is also refreshed on each check.
@@ -52,15 +53,16 @@ The Explorer view groups findings by file, provides diff/revert/waive actions, a
 
 ## CLI and MCP
 
-The build produces dist/cli.js and dist/mcp-server.js alongside the VS Code extension bundle. The CLI does not require an active extension session when a Git base and contract are supplied. Run from the repository root:
+The build produces `dist/cli.js` and `dist/mcp-server.js` alongside the VS Code extension bundle. The CLI does not require an active extension session when a Git base and contract are supplied. Run from the repository root:
 
     node dist/cli.js check --base origin/main --contract .intent/default.yaml --format github
-    node dist/cli.js start default
+    node dist/cli.js start default [--force]
     node dist/cli.js check
     node dist/cli.js revert src/example.ts
+    node dist/cli.js hook install
     node dist/cli.js stop
 
-The CLI reads the contract from the same policy tree it checks: the selected `--base`, the active session baseline, or `HEAD`. The contract path must exist in that tree. This keeps a change from weakening its own policy during a check. The check command returns exit code 1 when unwaived error findings exist. Formats are text, json, and GitHub Actions annotations. The MCP server uses JSON-RPC over stdio and exposes get_active_contract, verify_intent_contract, revert_out_of_scope_files, and start_intent_contract.
+The CLI reads the contract from the same policy tree it checks: the selected `--base`, the active session baseline, or `HEAD`. The contract path must exist in that tree. This keeps a change from weakening its own policy during a check. The check command returns exit code 1 when unwaived error findings exist. Formats are text, json, and GitHub Actions annotations. The MCP server uses JSON-RPC over stdio and exposes `get_active_contract`, `verify_intent_contract`, `revert_out_of_scope_files`, and `start_intent_contract`.
 
 ## Development checks
 

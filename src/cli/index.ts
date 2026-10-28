@@ -2,6 +2,7 @@
 import path from "node:path";
 import { findRepositoryRoot } from "../git/cli";
 import { normalizeContractPath, revertIntentFile, startIntentContract, stopIntentContract, verifyIntentContract } from "../runtime/contracts";
+import { installPreCommitHook, installPrePushHook } from "../config/agentConfig";
 import type { Finding } from "../detectors/types";
 
 type OutputFormat = "text" | "json" | "github";
@@ -55,6 +56,17 @@ export async function runCli(argv: string[], workingDirectory = process.cwd()): 
       await stopIntentContract(root);
       process.stdout.write("Stopped the active Intent Contract.\n");
       return 0;
+    }
+    if (command === "hook") {
+      const sub = filtered[1];
+      if (sub === "install" || !sub) {
+        const cliPath = path.resolve(__dirname, "cli.js");
+        await installPreCommitHook(root, cliPath);
+        await installPrePushHook(root, cliPath);
+        process.stdout.write("Installed Git pre-commit and pre-push hooks.\n");
+        return 0;
+      }
+      throw new Error("Usage: intent-contract hook install");
     }
     throw new Error("Unknown command: " + command);
   } catch (error) {
@@ -130,6 +142,7 @@ function writeUsage(): void {
     "  intent-contract start <contract-name> [--force]\n" +
     "  intent-contract check [--base <git-ref>] [--contract <path>] [--format text|json|github]\n" +
     "  intent-contract revert <file>\n" +
+    "  intent-contract hook install\n" +
     "  intent-contract stop\n" +
     "  intent-contract --workspace <repo-path> <command>\n"
   );

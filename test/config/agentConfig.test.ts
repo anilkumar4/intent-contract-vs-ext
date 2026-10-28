@@ -1,5 +1,9 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { mergeMcpConfig, upsertMarkedRule } from "../../src/config/agentConfig";
+import { installPreCommitHook, installPrePushHook, mergeMcpConfig, upsertMarkedRule } from "../../src/config/agentConfig";
 
 describe("AI agent configuration helpers", () => {
   it("adds Intent Contract MCP while preserving existing servers and settings", () => {
@@ -26,5 +30,24 @@ describe("AI agent configuration helpers", () => {
     expect(second.match(/BEGIN INTENT CONTRACT GENERATED RULE/g)).toHaveLength(1);
     expect(second).toContain("User instructions.");
     expect(second).toContain("Call the contract tools before finishing.");
+  });
+
+  it("installs pre-commit and pre-push hooks that block on active contract violations", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "intent-hook-test-"));
+    try {
+      execFileSync("git", ["init", "-q", root]);
+      await installPreCommitHook(root, "/fake/cli.js");
+      await installPrePushHook(root, "/fake/cli.js");
+
+      const preCommit = await fs.readFile(path.join(root, ".git/hooks/pre-commit"), "utf8");
+      expect(preCommit).toContain("intent_contract_status");
+      expect(preCommit).toContain("Commit BLOCKED");
+
+      const prePush = await fs.readFile(path.join(root, ".git/hooks/pre-push"), "utf8");
+      expect(prePush).toContain("intent_contract_status");
+      expect(prePush).toContain("Git push BLOCKED!");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
   });
 });

@@ -220,7 +220,8 @@ async function configureAgents(context: vscode.ExtensionContext): Promise<void> 
     { label: "Google Antigravity", description: ".agents/mcp_config.json + .agents/rules/intent-contract.md", picked: true, integration: "antigravity" },
     { label: "Claude Code", description: ".mcp.json + CLAUDE.md section", picked: true, integration: "claude" },
     { label: "GitHub Copilot", description: ".mcp.json + .github/copilot-instructions.md", picked: true, integration: "copilot" },
-    { label: "Git Pre-Commit Hook", description: ".git/hooks/pre-commit", picked: true, integration: "precommit" }
+    { label: "Git Pre-Commit Hook", description: ".git/hooks/pre-commit (blocks commits on contract errors)", picked: true, integration: "precommit" },
+    { label: "Git Pre-Push Hook", description: ".git/hooks/pre-push (blocks git push on contract errors)", picked: true, integration: "prepush" }
   ];
   const selected = await vscode.window.showQuickPick(items, {
     canPickMany: true,

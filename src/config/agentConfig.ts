@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { gitText } from "../git/cli";
 
-export type AgentIntegration = "cursor" | "antigravity" | "claude" | "copilot" | "precommit";
+export type AgentIntegration = "cursor" | "antigravity" | "claude" | "copilot" | "precommit" | "prepush";
 
 const START_MARKER = "<!-- BEGIN INTENT CONTRACT GENERATED RULE -->";
 const END_MARKER = "<!-- END INTENT CONTRACT GENERATED RULE -->";
@@ -33,6 +33,9 @@ export async function configureAgentIntegrations(
     } else if (integration === "precommit") {
       await installPreCommitHook(root, path.join(extensionPath, "dist", "cli.js"));
       configured.push("Git pre-commit hook");
+    } else if (integration === "prepush") {
+      await installPrePushHook(root, path.join(extensionPath, "dist", "cli.js"));
+      configured.push("Git pre-push hook (blocks git push on contract violations)");
     }
   }
   return configured;
@@ -113,7 +116,52 @@ export async function installPreCommitHook(root: string, cliPath: string): Promi
     "  fi",
     "  \"$NODE_BIN\" " + shellQuote(cliPath) + " check",
     "  intent_contract_status=$?",
-    "  if [ \"$intent_contract_status\" -ne 0 ]; then exit \"$intent_contract_status\"; fi",
+    "  if [ \"$intent_contract_status\" -ne 0 ]; then",
+    "    echo \"\" >&2",
+    "    echo \"[Intent Contract] Commit BLOCKED: Active contract violations must be resolved or waived.\" >&2",
+    "    echo \"Run 'intent-contract check' or inspect VS Code diagnostics for details.\" >&2",
+    "    echo \"\" >&2",
+    "    exit \"$intent_contract_status\"",
+    "  fi",
+    "fi",
+    END_MARKER
+  ].join("\n");
+  const updated = upsertHookBlock(existing, block);
+  await fs.mkdir(path.dirname(hookPath), { recursive: true });
+  await fs.writeFile(hookPath, updated, "utf8");
+  try {
+    await fs.chmod(hookPath, 0o755);
+  } catch {
+    // chmod is not available for every filesystem used by Windows workspaces.
+  }
+}
+
+export async function installPrePushHook(root: string, cliPath: string): Promise<void> {
+  const hookPath = path.resolve(root, (await gitText(root, ["rev-parse", "--path-format=absolute", "--git-path", "hooks/pre-push"])).trim());
+  await assertRegularFileOrMissing(hookPath);
+  const existing = await readIfPresent(hookPath) ?? "";
+  const nodeExec = process.execPath ? shellQuote(process.execPath) : "node";
+  const block = [
+    START_MARKER,
+    "if [ -f .intent/.state.json ]; then",
+    "  NODE_BIN=\"node\"",
+    "  if ! command -v \"$NODE_BIN\" >/dev/null 2>&1; then",
+    "    NODE_BIN=" + nodeExec,
+    "    export ELECTRON_RUN_AS_NODE=1",
+    "  fi",
+    "  \"$NODE_BIN\" " + shellQuote(cliPath) + " check",
+    "  intent_contract_status=$?",
+    "  if [ \"$intent_contract_status\" -ne 0 ]; then",
+    "    echo \"\" >&2",
+    "    echo \"======================================================================\" >&2",
+    "    echo \" [Intent Contract] Git push BLOCKED!\" >&2",
+    "    echo \" Active contract violations were detected in your changes.\" >&2",
+    "    echo \" Resolve error findings or obtain an authorized waiver before pushing.\" >&2",
+    "    echo \" Run 'intent-contract check' or inspect VS Code diagnostics for details.\" >&2",
+    "    echo \"======================================================================\" >&2",
+    "    echo \"\" >&2",
+    "    exit \"$intent_contract_status\"",
+    "  fi",
     "fi",
     END_MARKER
   ].join("\n");

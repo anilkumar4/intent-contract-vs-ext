@@ -1,118 +1,350 @@
-# Intent Contract: Project Architecture
+# Intent Contract: Architecture & Deep-Dive Guide
 
-This guide describes the implementation in this repository and pairs with [the editable Draw.io architecture diagram](intent-contract-architecture.drawio). The extension, command-line tool, and MCP server share one contract and detector runtime so the same policy produces the same findings in each integration.
+This guide provides an end-to-end architectural reference for **Intent Contract** (`anilkumar4.intent-contract`), detailing how it works, its integration with Git, the detector algorithms, the security model, and the outcomes it delivers.
 
-## What the project does
+---
 
-Intent Contract captures a Git tree as the baseline for a task. A YAML contract defines which files and symbols may change and which risks are forbidden. The tool compares the current working tree with that baseline, evaluates the changes, and reports findings with severity, file, line when available, evidence, and remediation.
+## 1. Executive Summary: What Problem Does Intent Contract Solve?
 
-It reports changes after they are written; it does not prevent an editor or agent from writing a file. The extension adds diagnostics, an Explorer findings tree, status-bar state, baseline diffs, waivers, and a restore action.
+Autonomous AI coding agents (Claude Code, Cursor, Copilot Workspace, Google Antigravity, Devin, etc.) can write and modify code faster than ever. However, without strict guardrails, agents frequently:
+1. **Creep outside their assigned task scope**: Editing unapproved files, touching shared libraries, or modifying configuration.
+2. **Silently weaken or bypass test suites**: Relaxing numeric tolerances (`pytest.approx`), deleting assertions, adding `.skip()`, or replacing strict matchers (`toBe` → `toBeTruthy`) to make tests pass.
+3. **Introduce supply-chain vulnerabilities**: Adding unvetted runtime dependencies, modifying npm lifecycle scripts (`postinstall`), or adding module replacement directives (`go.mod replace`).
+4. **Cause architectural drift**: Introducing unauthorized cross-module imports that violate system design boundaries.
+5. **Tamper with guardrails**: Editing the contract itself, loosening read-only rules, or fabricating approval waivers.
 
-## Main components
+**Intent Contract** solves this by establishing an immutable, tamper-resistant **task boundary** backed by Git tree cryptography. It observes file changes, verifies them against a strict policy contract (`.intent/*.yaml`), and reports findings with actionable remediation instructions for humans and AI agents.
 
-| Component | Source | Responsibility |
-| --- | --- | --- |
-| VS Code extension | **src/extension.ts**, **src/ui/** | Commands, workspace watcher, contract session UI, diagnostics, status bar, findings tree, diff/revert/waive actions, and architecture preview. |
-| Contract schema and loader | **src/contract/** | Discover YAML contracts, parse and validate their schema, create a starter contract, and keep generated session metadata ignored. |
-| Shared runtime | **src/runtime/contracts.ts** | Start and stop sessions, load the baseline contract, capture the current tree, run verification, apply waivers, and format remediation instructions. |
-| Git snapshot and diff | **src/git/** | Capture a baseline using a temporary Git index, compare trees, retain before/after text and line hunks, and restore files without changing the user's Git index. |
-| Detector pipeline | **src/detectors/index.ts** | Run scope, symbol, dependency, high-risk, test-integrity, and architecture detectors, then deduplicate and sort findings. |
-| Architecture parser | **src/architecture/diagramParser.ts** | Normalize Mermaid, C4 Mermaid, Mermaid Markdown sections, and Draw.io diagrams into nodes with labels/globs and directed allowed edges. |
-| Architecture detector | **src/detectors/architectureDrift.ts** | Resolve imports in changed source files to diagram nodes and report cross-module dependencies without a directed edge. |
-| CLI | **src/cli/index.ts** | Provide start, check, revert, and stop; check supports text, JSON, and GitHub annotation output. |
-| MCP server | **src/mcp/server.ts** | Expose active-contract, verification, revert, and start tools using JSON-RPC over stdio. |
-| Agent setup | **src/config/agentConfig.ts** | Configure supported agent instructions and MCP entries while preserving existing configuration. |
+---
 
-At build time, esbuild bundles the extension, CLI, and MCP server into **dist/**. The build then packages those artifacts and the extension manifest into **intent-contract.vsix**.
+## 2. Key Benefits & Real-World Outcomes
 
-## Contract and policy inputs
+### Benefits
+- **Agent Containment Without Frustration**: Intent Contract does not intercept or block file writes while editing or building. It runs asynchronously, computing findings within milliseconds and surfacing diagnostics instantly.
+- **Zero Self-Approval Loopholes**: The contract, waivers, and architecture diagrams are evaluated against the **baseline tree**, never the dirty working tree. An agent cannot authorize its own changes by modifying the YAML contract or diagram during a session.
+- **Non-Invasive Git Hygiene**: Baseline snapshots are captured via an isolated temporary Git index. The developer's real Git staging index and untracked files are never touched or modified.
+- **Supply Chain & Test Defense**: Detects subtle test weakening across JavaScript, TypeScript, Python, and Go, plus supply-chain risks across npm, pip, Go, Cargo, Maven, Gradle, .NET, and Ruby.
+- **Unified Across VS Code, CLI, and MCP**: The exact same detector pipeline powers the VS Code extension, the headless CLI for CI/CD, and the Model Context Protocol (MCP) server for agents.
 
-A contract can opt into architecture enforcement:
+### Outcomes
+| Outcome | Metric / Impact |
+| --- | --- |
+| **0 Silent Test Weakening** | Catches assertion deletions, matcher downgrades, and tolerance inflation before code is committed. |
+| **Zero Scope Creep** | Unapproved file edits and symbol-level mutations are detected with line numbers and remediation instructions. |
+| **Gated Delivery (Git Push & Commit Block)** | Git `pre-commit` and `pre-push` hooks prevent broken or out-of-scope code from being committed or pushed. |
+| **Deterministic CI Gating** | Returns exit code `1` for active error findings, with GitHub Actions annotations that pinpoint exact lines. |
+| **Auditable Exception Trail** | Authorized exceptions require a recorded reason and timestamp bound to the diff hash; future edits to waived code automatically re-open findings. |
 
-```yaml
-name: billing-change
-intent: Keep billing changes within the approved module boundaries
-scope:
-  modify: ["src/billing/**", "src/shared/**"]
-  read_only: []
-architecture:
-  diagram: "docs/system.mmd"
-  node_mappings:
-    Billing: ["src/billing/**"]
-    Shared: ["src/shared/**"]
-    Inventory: ["src/inventory/**"]
-  default_policy: "deny_unlisted_edges"
-forbid:
-  - architecture_drift
-allow_exceptions: false
+---
+
+## 3. High-Level System Architecture
+
+The following diagram illustrates how the VS Code extension, the CLI, and the MCP server interface with the shared Intent Contract runtime, detectors, and the underlying Git repository:
+
+```mermaid
+flowchart TD
+    subgraph Clients["Clients & Interfaces"]
+        IDE["VS Code / Cursor Extension<br/>(Diagnostics, Findings Tree, Baseline Diff, Status Bar)"]
+        CLI["Headless CLI (`intent-contract`)<br/>(Start, Check, Revert, Hook, CI --base)"]
+        MCP["Model Context Protocol (MCP) Server<br/>(Cursor, Claude Code, Antigravity, Copilot)"]
+        HOOKS["Git Hooks (`pre-commit`, `pre-push`)<br/>(Blocks commit/push on active contract errors)"]
+    end
+
+    subgraph Runtime["Shared Core Runtime (src/runtime/)"]
+        Lifecycle["Session Lifecycle & State<br/>(.intent/.state.json, originalBaselineTreeHash)"]
+        ContractLoader["Contract Schema & Validator<br/>(Zod Schema, Strict YAML Parsing)"]
+        VerificationEngine["Verification Engine<br/>(verifyIntentContract)"]
+        Waivers["Waiver & Tamper Resistance<br/>(.intent/waivers.json)"]
+        Violations["Violations Formatter<br/>(.intent/.violations.md)"]
+    end
+
+    subgraph GitEngine["Git Snapshot & Diff Engine (src/git/)"]
+        Snapshot["Snapshot Engine<br/>(Temporary Index via GIT_INDEX_FILE, git add -f)"]
+        DiffEngine["Diff Engine<br/>(git diff-tree, parallel git cat-file blob)"]
+        RevertEngine["Revert Engine<br/>(Byte-exact baseline restore)"]
+    end
+
+    subgraph Detectors["Detector Pipeline (src/detectors/)"]
+        D_Scope["Scope Detector<br/>(modify, read_only, !exclusions, implicit .intent)"]
+        D_Symbol["Symbol Scope Detector<br/>(TS Compiler AST, Python AST, Qualified Symbols)"]
+        D_Dep["Dependencies & Supply Chain<br/>(npm, pip, go, cargo, maven, gradle, dotnet, ruby)"]
+        D_Risk["High-Risk Files<br/>(CI, IaC, K8s, Agent Rules, .env, Configurable)"]
+        D_Test["Test Weakening & Tautology<br/>(Assertion Loss, pytest.approx, Skip, @Disabled)"]
+        D_Arch["Architecture Drift<br/>(Mermaid, C4, Draw.io, TS/Py/Go/JVM/C# Imports)"]
+    end
+
+    IDE --> Lifecycle
+    IDE --> VerificationEngine
+    CLI --> VerificationEngine
+    HOOKS --> CLI
+    MCP --> VerificationEngine
+    MCP --> RevertEngine
+
+    VerificationEngine --> ContractLoader
+    VerificationEngine --> GitEngine
+    VerificationEngine --> Detectors
+    VerificationEngine --> Waivers
+    VerificationEngine --> Violations
 ```
 
-The architecture block is optional. When architecture_drift is listed in forbid, the schema requires an architecture block. Node mappings associate a diagram node ID or visible label with repository globs. Inline glob tags such as [src/billing/**] in a diagram node label are also accepted and merged with contract mappings. A path matching multiple nodes is ambiguous and produces a warning.
+---
 
-The contract and diagram are read from the policy baseline during verification. The CLI reads the contract from the same tree used for the check: the explicit `--base`, the active session baseline, or `HEAD`. The contract path must exist in that tree. Changing the contract mappings, forbid list, or diagram in the same working-tree change therefore cannot authorize a new dependency in that check. To adopt a revised policy, update the policy files and select a new baseline.
+## 4. How Intent Contract Works with Git
 
-## Baseline and verification flow
+A core design principle of Intent Contract is **clean, non-invasive Git mechanics**. It acts as a transparent observer without disrupting the user's Git workflow.
 
-1. **Start:** the extension, CLI, or MCP calls the shared runtime. The runtime validates the selected contract, prepares ignored .intent metadata, and captures the repository state using a temporary Git index. The real Git staging index remains untouched.
-2. **Change detection:** the extension checks after editor saves and file-system events, or the CLI/MCP checks on demand. Git comparison identifies modified, added, deleted, and renamed files and retains their current content and line hunks.
-3. **Contract evaluation:** the detector pipeline runs the relevant detectors. Architecture checking runs only when the active contract includes architecture_drift.
-4. **Reporting:** findings are deduplicated and sorted. The extension updates diagnostics, the tree, status bar, and .intent/.violations.md; the CLI returns its selected output format and exit code; MCP returns structured findings and remediation instructions.
-5. **Restore or waive:** a restore action reads the captured baseline. A waiver requires an explanation and is available only when the contract allows exceptions.
+### 4.1. Baseline Capture via Temporary Git Index
+When a contract is started (`intentContract.start` or `intent-contract start <name>`):
+1. **Isolated Index**: The snapshot engine creates an isolated temporary index file via `GIT_INDEX_FILE`. The repository's actual `.git/index` is never read or written.
+2. **Working Tree Snapshot**: The temporary index stages the working directory, including untracked and unstaged files (`git add -A`). 
+3. **Ignored Secret Inclusion**: Canonical secrets such as `.env` and `secrets/**` (which are typically in `.gitignore`) are force-added (`git add -f`) into the temporary index so that changes to existing environment configs are tracked.
+4. **Baseline Tree Hash**: `git write-tree` writes a Git tree object representing the baseline, and a reference is saved under `refs/intent/baselines/<id>` so Git's garbage collection does not purge it.
+5. **Session State**: The state is recorded in `.intent/.state.json` (which is automatically added to `.gitignore`).
 
-## Diagram normalization
+### 4.2. Baseline Immutability & Re-baselining Protection
+- **Baseline Policy Reading**: When running checks, the active contract (`.intent/<name>.yaml`) and referenced architecture diagrams are read directly from `session.baselineTreeHash` using `git cat-file blob`.
+- **Anti-Laundering Guard**: If an agent attempts to re-run `start` mid-session after introducing unauthorized edits, the session retains `originalBaselineTreeHash`. Violations against the original baseline remain visible unless `--force` is explicitly supplied.
 
-The parser is local TypeScript and Node built-ins only; it adds no parser package. Its normalized graph contains a map from node ID to a record with id, label, and globs, plus a set of directed strings such as Billing->Shared.
+### 4.3. Parallelized Diffing with Zero Overhead
+When code changes occur:
+1. `createWorkingTreeSnapshot(root)` captures the current working tree into another lightweight temporary tree.
+2. `diffTrees(root, baselineTreeHash, currentTreeHash)` runs `git diff-tree -r -M -z --name-status` and `git diff -M -U3`.
+3. Before and after file contents are read concurrently via `Promise.all` using `git cat-file blob <tree>:<path>`, capping buffer sizes at 2 MB to prevent memory spikes while eliminating serialized process spawn bottlenecks.
 
-### Mermaid flowcharts
+### 4.4. Byte-Exact Baseline Reversion
+When a file is reverted via the VS Code UI, CLI (`intent-contract revert <file>`), or MCP (`revert_out_of_scope_files`):
+- The file is restored **byte-for-byte** to its exact baseline state (including dirty uncommitted work that was present when the contract began).
+- If the file was newly added after the baseline was established, it is cleanly removed from disk.
+- Path traversal outside the repository is strictly rejected.
+- The real Git staging index is untouched.
 
-MMD files support graph and flowchart declarations in TD, LR, BT, and RL directions. The parser recognizes normal arrows, dotted arrows, thick arrows, chains, and explicit bidirectional arrows. It ignores %% comments. A label such as Billing [src/billing/**] contributes the visible label Billing and the glob src/billing/**.
+### 4.5. Git Hooks: Blocking `git commit` and `git push`
+Intent Contract can install Git hooks (`intent-contract hook install` or via VS Code **Configure AI Agents & MCP**):
+- **`pre-commit`**: Executes `intent-contract check`. If any unwaived error-level finding exists, the commit is aborted.
+- **`pre-push`**: Executes `intent-contract check` before any push to a remote repository. If active contract violations exist, it prints a prominent error banner to `stderr` and aborts the push, guaranteeing that out-of-scope or test-weakened code never reaches remote branches:
 
-### C4 Mermaid
+```
+======================================================================
+ [Intent Contract] Git push BLOCKED!
+ Active contract violations were detected in your changes.
+ Resolve error findings or obtain an authorized waiver before pushing.
+ Run 'intent-contract check' or inspect VS Code diagnostics for details.
+======================================================================
+```
 
-C4 declarations such as Person, System, Container, Component, and common external/database variants create nodes. Rel creates a directed edge, Rel_Back reverses it, and BiRel creates both directions. C4 blocks are accepted even when they do not use a flowchart header.
+---
 
-### Mermaid inside Markdown
+## 5. Session Lifecycle & Workflow Sequence
 
-Markdown references can select Mermaid fences in a file or a single section, for example README.md#architecture. Heading anchors are slugged from heading text. Fences may use backticks or tildes.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Developer / Agent
+    participant Ext as Intent Contract (IDE / CLI / MCP)
+    participant Git as Git Engine
+    participant Runtime as Shared Runtime
+    participant Detectors as Detector Pipeline
 
-### Draw.io
+    User->>Ext: Start Contract ("feature-billing")
+    Ext->>Runtime: startIntentContract(root, "feature-billing")
+    Runtime->>Git: Capture working tree baseline (temp index)
+    Git-->>Runtime: Baseline tree hash (e.g. 7f2a1b)
+    Runtime->>Git: Store ref refs/intent/baselines/...
+    Runtime->>Runtime: Write .intent/.state.json
+    Runtime-->>User: Contract active (Baseline locked)
 
-Draw.io .drawio and .dio files are read as XML. Vertex cells contribute IDs and labels; HTML formatting is removed while text and bracketed glob tags are retained. Edges use source and target attributes. Explicitly disabled arrows are ignored, start arrows reverse the source and target direction, and two active arrows create reciprocal policy edges. Compressed Draw.io page payloads are inflated with Node's built-in zlib support and capped at five MiB after expansion. Draw.io SVG files can contain XML in an SVG content attribute or encoded XML.
+    Note over User,Ext: Agent or Developer modifies source files
 
-XML DTD and entity declarations are rejected. Diagram input is limited to five MiB by the detector. Unsupported formats, malformed files, and empty graphs become warning findings so users can repair the policy input.
+    User->>Ext: File saved / CLI check / git push
+    Ext->>Git: Snapshot current working tree (temp index)
+    Git-->>Ext: Current tree hash (e.g. 9c4d3e)
+    Ext->>Git: diffTrees(baseline, current)
+    Git-->>Ext: ParsedDiff (added, deleted, modified, hunks)
+    Ext->>Detectors: detectFindingsForWorkspace(...)
+    Detectors-->>Ext: List of Findings [Scope, Tests, Deps, etc.]
+    Ext->>Runtime: Apply waivers (if allow_exceptions: true)
+    Ext->>Runtime: Write .intent/.violations.md
+    
+    alt Active Errors Exist
+        Ext-->>User: Status: FAIL (Red Status Bar, Diagnostics, Exit 1, Push Blocked)
+    else Clean or Only Warnings
+        Ext-->>User: Status: PASS (Green Status Bar, Exit 0, Push Allowed)
+    end
 
-## Import resolution and drift findings
+    opt Revert Violations
+        User->>Ext: Revert File (UI or MCP)
+        Ext->>Git: Restore baseline blob to disk
+    end
 
-Modified, added, and renamed source files are checked. Renames are evaluated at their new repository path so moving a file between mapped modules re-evaluates its ownership. For each import in those files, the detector maps the importer to one diagram node, resolves the target file, maps it to another node, and checks the directed edge. Existing imports in a modified file are checked too; enforcement is not limited to newly added import lines.
+    opt Waive Finding (if authorized)
+        User->>Ext: Waive Finding (Reason + Timestamp)
+        Ext->>Runtime: Append to .intent/waivers.json
+    end
 
-| Language | Import forms | Resolution |
+    User->>Ext: Stop Contract
+    Ext->>Git: Release baseline ref
+    Ext->>Runtime: Remove .state.json & .violations.md
+```
+
+---
+
+## 6. Detailed Detector Modules
+
+### 6.1. Path & Symbol Scope (`src/detectors/scope.ts` & `symbolScope.ts`)
+- **Path Rules**:
+  - `scope.modify`: List of glob patterns permitted to be edited.
+  - `scope.read_only`: High-priority read-only paths. Modifying, adding, or deleting a read-only file produces an immediate **error**.
+  - **Exclusion Syntax**: `modify: ["src/billing/**", "!src/billing/invoice.ts"]` evaluates exclusions without widening scope to other files.
+  - **Implicit Protection**: `.intent/**` (contracts, waivers, state) and diagram files referenced by the contract are implicitly protected as read-only.
+- **Symbol-Level Scope**:
+  - Restricts changes to specific functions or classes (e.g., `scope.modify_symbols: ["total", "InvoiceBuilder.total"]`).
+  - Uses the **TypeScript Compiler API** (`ts.createSourceFile`) to parse ASTs:
+    - Function declarations and expressions.
+    - Typed and untyped arrow functions: `const f = (x: T): R => {}`.
+    - Class methods, getters, setters, and constructors.
+    - Top-level constants and declarations outside functions.
+  - Supports Python AST parsing (`def`, class methods) and file-qualified symbols (`billing.ts::total`).
+
+### 6.2. Dependency & Supply-Chain Detector (`src/detectors/dependencies.ts`)
+- Triggered when `new_dependencies` is in `forbid`.
+- Compares `beforeContent` and `afterContent` of manifests to avoid false positives on existing dependencies.
+- **Supported Ecosystems**:
+  - **npm / yarn / pnpm**: `package.json` (`dependencies`, `devDependencies`, `peerDependencies`, `optionalDependencies`).
+  - **Python**: `requirements.txt`, `pyproject.toml` (PEP 621 arrays).
+  - **Go**: `go.mod` `require` directives and paired `go.sum` lockfiles.
+  - **Rust**: `Cargo.toml`.
+  - **Java / Kotlin**: Maven (`pom.xml`) and Gradle (`build.gradle.kts`, `build.gradle`).
+  - **.NET**: `*.csproj` (`<PackageReference>`).
+  - **Ruby**: `Gemfile`.
+- **Supply-Chain Guardrails**:
+  - Flags npm lifecycle scripts (`scripts.preinstall`, `scripts.postinstall`).
+  - Flags dependency overrides (`overrides` in npm, `resolutions` in yarn).
+  - Flags Go module forks (`replace` in `go.mod`).
+
+### 6.3. High-Risk File Detector (`src/detectors/highRisk.ts`)
+- Triggered when `high_risk_files` is in `forbid`.
+- Checks for modifications or additions to critical infrastructure and control files:
+  - **CI/CD**: GitHub Actions (`.github/workflows/**`, `.github/actions/**`, `CODEOWNERS`, `dependabot.yml`), GitLab CI, CircleCI, Azure Pipelines, Jenkinsfile.
+  - **Infrastructure as Code**: Terraform (`*.tf`, `*.tfvars`), Bicep (`*.bicep`), Kubernetes manifests (`k8s/**`, `kubernetes/**`), Dockerfiles, Docker Compose.
+  - **Agent Rules & Prompts**: `.mcp.json`, `.cursor/**`, `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`.
+  - **Secrets & Tooling**: `.env*`, `.npmrc`, `.husky/**`, `.vscode/tasks.json`.
+- **Contract Customization**: Contracts can extend or relax rules using:
+  ```yaml
+  high_risk:
+    include: ["helm/**", "db/migrations/**"]
+    exclude: ["infra/dev.tfvars"]
+  ```
+
+### 6.4. Test Weakening & Tautological Tests (`src/detectors/testWeakening.ts`)
+- Triggered when `test_weakening` is in `forbid`.
+- **Assertion and Test Loss**:
+  - Flags net deletion of `expect(...)`, `assert`, or test cases.
+  - Flags deleted test files (`*.test.*`, `*.spec.*`, `*_test.go`, `test_*.py`).
+- **Matcher Downgrades**:
+  - Flags downgrades from strict assertions to truthy assertions (e.g. `.toBe(x)` → `.toBeTruthy()`).
+  - Flags assertion negation flips (e.g. `.toBe(x)` → `.not.toBe(x)`).
+- **Tolerance Widening**:
+  - Flags loosening numeric tolerances in `toBeCloseTo(val, precision)` and `pytest.approx(val, rel=..., abs=...)` (including scientific notation like `1e-6` → `0.5`).
+- **Disabled Tests**:
+  - Flags `it.skip`, `xit`, `it.todo`, `it.only`, Python `@pytest.mark.skip`, Go `t.Skip()`, and JUnit/Kotest `@Disabled`.
+  - Flags test runner config exclusions (`vitest exclude`, `jest testPathIgnorePatterns`).
+- **Tautological & Self-Mocking Tests**:
+  - Flags tests that assert trivially true conditions (`expect(true).toBe(true)`).
+  - Flags tests asserting against their own mock return values.
+  - Flags assertion-free tests in JavaScript, TypeScript, and Python.
+
+### 6.5. Architecture Drift (`src/detectors/architectureDrift.ts`)
+- Triggered when `architecture_drift` is in `forbid`.
+- **Supported Architecture Diagrams**:
+  - Mermaid Flowcharts (`.mmd`, fenced markdown, `#anchor` headings).
+  - Mermaid C4 diagrams (`Person`, `Container`, `Component`, `Rel`).
+  - Draw.io XML and compressed SVG (`.drawio`, `.dio`).
+- **Import Resolution**:
+  - **TypeScript / JavaScript**: Resolves static, dynamic, require, and `tsconfig` path aliases (`@app/*`).
+  - **Python**: Resolves relative imports and *src-layout* package roots.
+  - **Go**: Resolves package imports under the module root, including aliased and blank imports (`import _ "..."`).
+  - **JVM / .NET**: Resolves Java, C#, and Kotlin namespace packages.
+- Cross-node imports that do not have a corresponding directed arrow in the diagram produce an immediate error with exact source line and permitted outgoing connections.
+
+---
+
+## 7. Tamper-Evident Waivers & Policy Integrity
+
+### 7.1. Waiver Integrity
+- Waivers live in `.intent/waivers.json`.
+- Each waiver record binds to the deterministic finding ID (hash of detector, file, rule, and diff evidence):
+  ```json
+  {
+    "id": "5d75480e6ec686340f9a3cff",
+    "reason": "Authorized refactoring of legacy billing interface",
+    "timestamp": "2026-10-28T10:00:00.000Z"
+  }
+  ```
+- **Evidence Re-Opening**: If an agent makes further edits to a waived file, the diff evidence changes, recalculating a new finding ID and automatically re-opening the finding.
+- **Strict Validation**: Waivers with empty reasons, whitespace, or invalid timestamps are rejected.
+- **Schema Gating**: If the contract specifies `allow_exceptions: false`, the runtime ignores all waivers, preventing unauthorized approvals.
+
+---
+
+## 8. CLI Reference & CI/CD Integration
+
+### CLI Commands
+```bash
+# Start a contract session
+intent-contract start <contract-name> [--force]
+
+# Check active contract or verify against a Git ref without a session
+intent-contract check [--base <ref>] [--contract <path>] [--format text|json|github]
+
+# Revert a file back to its captured baseline
+intent-contract revert <file-path>
+
+# Install Git pre-commit and pre-push hooks
+intent-contract hook install
+
+# Stop the active contract session
+intent-contract stop
+```
+
+### GitHub Actions CI Workflow Example
+```yaml
+name: Intent Contract Policy Check
+
+on:
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  verify-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Intent Contract
+        run: npm install -g anilkumar4/intent-contract-vs-ext
+
+      - name: Verify Contract Against Base Branch
+        run: |
+          intent-contract check \
+            --base origin/${{ github.base_ref }} \
+            --contract .intent/default.yaml \
+            --format github
+```
+
+---
+
+## 9. Summary: Why Intent Contract is Built for Modern AI Engineering
+
+| Feature | Without Intent Contract | With Intent Contract |
 | --- | --- | --- |
-| JavaScript / TypeScript | Static imports, re-exports, require, dynamic import, and import-equals | TypeScript module resolution, including relative files and tsconfig paths aliases such as @/*. |
-| Python | import, from ... import ..., parenthesized multiline imports, and relative imports | Dotted module paths and imported submodules map to .py modules and package __init__.py files in the repository; package symbols fall back to their containing module. |
-| Go | Single and grouped import declarations | Imports under the repository go.mod module path map to source files in the imported package directory. |
-
-External packages are ignored by architecture boundaries. If an import is likely internal but cannot resolve, or its importer or target has no unique node mapping, the detector emits a warning rather than inventing an edge. An internal cross-node import with no directed edge emits an error at the import line. The message names both nodes and files, the policy diagram, and the source node's allowed outgoing dependencies.
-
-An arrow is directional: Billing --> Shared permits Billing to import Shared. It does not permit Shared to import Billing. A same-node import does not require an edge.
-
-## Live drift diagram
-
-**Intent Contract: Export Architecture Drift Diagram** runs the active check, writes **.intent/.architecture-drift.mmd**, and opens a Markdown preview containing the Mermaid graph. Official dependencies are drawn solid green. Illegal code imports are drawn dashed red with a VIOLATION label and cross arrow. Re-running the command refreshes the generated file and preview.
-
-The generated report is ignored by .intent/.gitignore so it does not become a task change or trigger a scope warning. The source policy diagram remains authoritative; the exported diagram shows that policy plus current code violations.
-
-## Extension, CLI, and MCP
-
-All three integrations call the same runtime and workspace detector pipeline:
-
-- The **extension** starts a baseline session and watches for file changes. Findings appear in the Explorer view, editor diagnostics, and status bar. Its export command reuses the active contract and baseline.
-- The **CLI** can check an active session or an explicit base and contract. An error finding returns exit code 1. GitHub format produces CI annotations.
-- The **MCP server** uses stdio JSON-RPC. verify_intent_contract calls the same runtime check, so architecture errors are returned in findings and make passed false.
-
-The CLI and MCP are bundled as independent Node entry points. The extension bundle externalizes the VS Code API. The diagram parser does not use a third-party parsing library.
-
-## Tests and maintenance
-
-The full Vitest suite includes Phase 5 coverage for flowchart node/glob/edge parsing, C4 relationships, Markdown anchors, Draw.io XML and SVG parsing, compressed pages, architecture boundaries and exact import lines, Python and Go resolution, export styling, and CLI/MCP enforcement. Earlier phases cover contract validation, Git snapshots and diffs, scope rules, dependency and high-risk detectors, test weakening, agent configuration, and MCP request behavior.
-
-The TypeScript typecheck validates the source project. The build type-checks, bundles the extension/CLI/MCP entries, and creates the installable VSIX.
+| **Agent Guardrails** | Rely on system prompts and hope the LLM complies. | Strict Git-level cryptographic enforcement. |
+| **Test Quality** | Agents silently delete assertions or skip flaky tests. | Test weakening and assertion loss are flagged instantly. |
+| **Architecture** | Codebases drift into spaghetti dependencies over time. | Validated in real-time against visual architecture diagrams. |
+| **Git Safety** | Unfinished or out-of-scope work is pushed to remote. | `pre-commit` and `pre-push` hooks block violations at the source. |
+| **Remediation** | Manual human review and debugging of diffs. | Structured Markdown remediation ready for one-click prompt injection. |
