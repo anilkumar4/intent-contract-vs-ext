@@ -113,6 +113,44 @@ describe("symbol scope detector", () => {
       file: "billing/other.ts"
     }));
   });
+
+  it("accepts changes to a local variable inside an allowed TypeScript function", () => {
+    const prorateContract: Contract = {
+      name: "prorate",
+      intent: "Allow prorate",
+      scope: {
+        modify: ["src/billing/proration.ts"],
+        modify_symbols: ["prorate"],
+        read_only: []
+      },
+      forbid: [],
+      allow_exceptions: true
+    };
+    const before = [
+      "export function prorate(amount: number): number {",
+      "  const base = amount * 1.0;",
+      "  const ratio = 0.5;",
+      "  return base * ratio;",
+      "}",
+      ""
+    ].join("\n");
+    const after = [
+      "export function prorate(amount: number): number {",
+      "  const base = amount * 1.0;",
+      "  const ratio = 0.8;",
+      "  return base * ratio;",
+      "}",
+      ""
+    ].join("\n");
+    const change = parseUnifiedDiff(
+      "M\0src/billing/proration.ts\0",
+      "diff --git a/src/billing/proration.ts b/src/billing/proration.ts\n--- a/src/billing/proration.ts\n+++ b/src/billing/proration.ts\n@@ -3,1 +3,1 @@\n-  const ratio = 0.5;\n+  const ratio = 0.8;\n"
+    ).changes[0];
+    change.beforeContent = before;
+    change.afterContent = after;
+    const findings = detectSymbolScope([change], prorateContract);
+    expect(findings).toEqual([]);
+  });
 });
 
 function parseChangedFunction(name: string, oldLine: string, newLine: string) {

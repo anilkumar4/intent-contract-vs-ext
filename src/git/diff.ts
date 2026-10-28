@@ -55,11 +55,16 @@ export function parseUnifiedDiff(nameStatusOutput: string, patch: string): Parse
 }
 
 export async function diffTrees(root: string, baselineTreeHash: string, currentTreeHash: string): Promise<ParsedDiff> {
-  const nameStatusOutput = await gitText(root, [
-    "diff-tree", "-r", "-M", "--no-commit-id", "-z", "--name-status", baselineTreeHash, currentTreeHash
-  ]);
-  const patch = await gitText(root, [
-    "diff", "-M", "-U3", "--no-ext-diff", "--no-textconv", "--no-color", baselineTreeHash, currentTreeHash, "--"
+  if (baselineTreeHash === currentTreeHash) {
+    return { changes: [] };
+  }
+  const [nameStatusOutput, patch] = await Promise.all([
+    gitText(root, [
+      "diff-tree", "-r", "-M", "--no-commit-id", "-z", "--name-status", baselineTreeHash, currentTreeHash
+    ]),
+    gitText(root, [
+      "diff", "-M", "-U3", "--no-ext-diff", "--no-textconv", "--no-color", baselineTreeHash, currentTreeHash, "--"
+    ])
   ]);
   const parsed = parseUnifiedDiff(nameStatusOutput, patch);
   await Promise.all(parsed.changes.map(async (change) => {

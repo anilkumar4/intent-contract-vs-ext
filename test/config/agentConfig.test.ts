@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { configureAgentIntegrations, installPreCommitHook, installPrePushHook, mergeMcpConfig, upsertMarkedRule } from "../../src/config/agentConfig";
+import { configureAgentIntegrations, installPreCommitHook, installPrePushHook, mergeMcpConfig, serverConfig, upsertMarkedRule } from "../../src/config/agentConfig";
 
 describe("AI agent configuration helpers", () => {
   it("adds Intent Contract MCP while preserving existing servers and settings", () => {
@@ -35,6 +35,27 @@ describe("AI agent configuration helpers", () => {
       await expect(fs.access(path.join(root, ".mcp.json"))).rejects.toMatchObject({ code: "ENOENT" });
     } finally {
       await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("creates a stable launcher entrypoint that exists on disk and survives extension updates", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "intent-mcp-launcher-test-"));
+    try {
+      const versionedFolder = path.join(tempDir, "anilkumar4.intent-contract-0.2.0");
+      const distFolder = path.join(versionedFolder, "dist");
+      await fs.mkdir(distFolder, { recursive: true });
+      await fs.writeFile(path.join(distFolder, "mcp-server.js"), "console.log('original server');");
+
+      const config = serverConfig(versionedFolder, "/workspace");
+      const serverEntrypoint = (config.args as string[])[0];
+      expect(serverEntrypoint).toBeDefined();
+      expect(await fs.stat(serverEntrypoint)).toBeDefined();
+
+      // Ensure the unversioned launcher points to the existing file
+      expect(serverEntrypoint).not.toContain("-0.2.0");
+      expect(serverEntrypoint).toContain("anilkumar4.intent-contract");
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
     }
   });
 

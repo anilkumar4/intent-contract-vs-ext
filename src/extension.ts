@@ -100,7 +100,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const scheduleCheck = (): void => {
     const config = vscode.workspace.getConfiguration("intentContract");
     if (config.get<boolean>("autoCheck", true) === false) return;
-    const debounceMs = config.get<number>("debounce", 800);
+    const debounceMs = config.get<number>("debounce", 300);
     if (checkTimer) clearTimeout(checkTimer);
     checkTimer = setTimeout(() => {
       checkTimer = undefined;
@@ -290,7 +290,9 @@ async function performCheck(): Promise<void> {
     }
     return;
   }
-  const pinnedSession = await ensurePolicyBaselineRef(root, savedSession);
+  const pinnedSession = (session && session.baselineTreeHash === savedSession.baselineTreeHash && session.originalBaselineRef === savedSession.originalBaselineRef)
+    ? session
+    : await ensurePolicyBaselineRef(root, savedSession);
   if (
     !session || !contract || policyTreeHash(session) !== policyTreeHash(pinnedSession) ||
     session.activeContract !== pinnedSession.activeContract

@@ -75,7 +75,7 @@
       "properties": {
         "intentContract.debounce": {
           "type": "number",
-          "default": 800,
+          "default": 300,
           "description": "Debounce delay in milliseconds before re-checking after file changes."
         },
         "intentContract.autoCheck": {

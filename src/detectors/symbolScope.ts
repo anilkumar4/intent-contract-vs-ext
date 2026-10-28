@@ -193,13 +193,36 @@ function findSymbols(source: string, file: string): SymbolRange[] {
   const topVarPattern = /\b(?:export\s+)?(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::\s*[^=\n]+)?\s*=/g;
   for (let match = topVarPattern.exec(masked); match; match = topVarPattern.exec(masked)) {
     const varName = match[1];
+    const line = lineAt(source, match.index);
+    if (ranges.some((r) => r.startLine <= line && r.endLine >= line)) continue;
+    if (braceDepthAt(masked, match.index) > 0) continue;
     if (!ranges.some((r) => r.name === varName)) {
-      const line = lineAt(source, match.index);
-      ranges.push({ name: varName, startLine: line, endLine: line });
+      let endLine = line;
+      const eqIndex = masked.indexOf("=", match.index);
+      const afterEq = masked.slice(eqIndex + 1);
+      const openBraceRel = afterEq.search(/\S/);
+      if (openBraceRel >= 0 && afterEq[openBraceRel] === "{") {
+        const openBrace = eqIndex + 1 + openBraceRel;
+        const closeBrace = matchingChar(masked, openBrace, "{", "}");
+        if (closeBrace >= 0) endLine = lineAt(source, closeBrace);
+      } else {
+        const end = expressionEnd(masked, eqIndex >= 0 ? eqIndex : match.index);
+        endLine = lineAt(source, end);
+      }
+      ranges.push({ name: varName, startLine: line, endLine });
     }
   }
 
   return ranges;
+}
+
+function braceDepthAt(source: string, targetIndex: number): number {
+  let depth = 0;
+  for (let index = 0; index < targetIndex; index += 1) {
+    if (source[index] === "{") depth += 1;
+    else if (source[index] === "}") depth = Math.max(0, depth - 1);
+  }
+  return depth;
 }
 
 function maskCommentsAndStrings(source: string, language: "js" | "python"): string {

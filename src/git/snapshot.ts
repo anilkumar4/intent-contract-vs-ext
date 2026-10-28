@@ -13,10 +13,20 @@ export interface BaselineSnapshot {
   baselineRef: string;
 }
 
+const indexPathCache = new Map<string, string>();
+
+async function getIndexPath(root: string): Promise<string> {
+  const cached = indexPathCache.get(root);
+  if (cached) return cached;
+  const resolved = (await gitText(root, ["rev-parse", "--path-format=absolute", "--git-path", "index"])).trim();
+  indexPathCache.set(root, resolved);
+  return resolved;
+}
+
 export async function createWorkingTreeSnapshot(root: string, readOnlyPatterns: string[] = []): Promise<string> {
   const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "intent-contract-index-"));
   const temporaryIndexPath = path.join(temporaryDirectory, "index");
-  const indexPath = (await gitText(root, ["rev-parse", "--path-format=absolute", "--git-path", "index"])).trim();
+  const indexPath = await getIndexPath(root);
   try {
     try {
       await fs.copyFile(indexPath, temporaryIndexPath);
@@ -30,7 +40,13 @@ export async function createWorkingTreeSnapshot(root: string, readOnlyPatterns: 
 
     // Include ignored files covered by policy so changes to those paths remain visible.
     try {
-      const ignoredRaw = await gitText(root, ["status", "--porcelain=v1", "-z", "-uall", "--ignored"]);
+      const ignoredRaw = await gitText(root, [
+        "status", "--porcelain=v1", "-z", "-uall", "--ignored", "--",
+        ":(exclude)node_modules",
+        ":(exclude).vscode-test",
+        ":(exclude)dist",
+        ":(exclude).git"
+      ]);
       const fields = ignoredRaw.split("\0");
       const ignoredFiles: string[] = [];
       for (const field of fields) {
