@@ -2,7 +2,7 @@
   "name": "intent-contract",
   "displayName": "Intent Contract",
   "description": "Detects changes that violate a local AI task contract.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "publisher": "anilkumar4",
   "repository": {
     "type": "git",
@@ -122,7 +122,7 @@
         {
           "id": "intent-contract-sidebar",
           "title": "Intent Contract",
-          "icon": "icon.png"
+          "icon": "media/activitybar.svg"
         }
       ]
     },
@@ -131,7 +131,7 @@
         {
           "id": "intentContractFindings",
           "name": "Intent Contract Findings",
-          "icon": "icon.png",
+          "icon": "media/activitybar.svg",
           "when": "workspaceFolderCount > 0"
         }
       ]

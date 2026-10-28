@@ -29,7 +29,7 @@ flowchart LR
   end
 
   subgraph "UI Components"
-    TREE["Activity Bar & Tree View"]
+    TREE["Activity Bar and Tree View"]
     DIAG["Diagnostics"]
     SB["Status Bar HUD"]
     DASH["Mission Control Dashboard"]
@@ -37,7 +37,7 @@ flowchart LR
     BUILDER["Visual Contract Builder"]
     CODELENS["Ambient Scope CodeLens"]
     QUICKFIX["Quick-Fix CodeActions"]
-    ACTIONS["Actions & Scope Helpers"]
+    ACTIONS["Actions and Scope Helpers"]
     BASELINE["Baseline Provider"]
   end
 

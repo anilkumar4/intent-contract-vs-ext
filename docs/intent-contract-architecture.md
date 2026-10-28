@@ -43,14 +43,14 @@ The following diagram illustrates how the VS Code extension, the CLI, and the MC
 
 ```mermaid
 flowchart TD
-    subgraph Clients["Clients & Interfaces"]
-        IDE["VS Code & Cursor UI<br/>(Activity Bar, CodeLens, Diagnostics, Diff Provider)"]
+    subgraph Clients["Clients and Interfaces"]
+        IDE["VS Code and Cursor UI<br/>(Activity Bar, CodeLens, Diagnostics, Diff Provider)"]
         CLI["Headless CLI (`intent-contract`)<br/>(Start, Check, Revert, Hook, CI --base)"]
         MCP["Model Context Protocol (MCP 2.0) Server<br/>(Cursor, Claude Code, Antigravity, Copilot)"]
         HOOKS["Git Hooks (`pre-commit`, `pre-push`)<br/>(Blocks commit/push on active contract errors)"]
     end
 
-    subgraph UILayer["UI & Developer Experience (src/ui/)"]
+    subgraph UILayer["UI and Developer Experience (src/ui/)"]
         Dashboard["Mission Control Dashboard<br/>(Live scorecards, Change stats, 1-click Agent prompt)"]
         ArchInspector["Visual Architecture Drift Inspector<br/>(Interactive graph overlay, Jump-to-line, Revert)"]
         VisualBuilder["Visual Contract Builder<br/>(Interactive form wizard, Workspace scan)"]
@@ -63,14 +63,14 @@ flowchart TD
     end
 
     subgraph Runtime["Shared Core Runtime (src/runtime/)"]
-        Lifecycle["Session Lifecycle & State<br/>(.intent/.state.json, originalBaselineTreeHash)"]
-        ContractLoader["Contract Schema & Validator<br/>(Zod Schema, Strict YAML Parsing)"]
+        Lifecycle["Session Lifecycle and State<br/>(.intent/.state.json, originalBaselineTreeHash)"]
+        ContractLoader["Contract Schema and Validator<br/>(Zod Schema, Strict YAML Parsing)"]
         VerificationEngine["Verification Engine<br/>(verifyIntentContract)"]
-        Waivers["Waiver & Tamper Resistance<br/>(.intent/waivers.json)"]
+        Waivers["Waiver and Tamper Resistance<br/>(.intent/waivers.json)"]
         Violations["Violations Formatter<br/>(.intent/.violations.md)"]
     end
 
-    subgraph GitEngine["Git Snapshot & Diff Engine (src/git/)"]
+    subgraph GitEngine["Git Snapshot and Diff Engine (src/git/)"]
         Snapshot["Snapshot Engine<br/>(Temporary Index via GIT_INDEX_FILE, git add -f)"]
         DiffEngine["Diff Engine<br/>(git diff-tree, parallel git cat-file blob)"]
         RevertEngine["Revert Engine<br/>(Byte-exact baseline restore)"]
@@ -80,9 +80,9 @@ flowchart TD
     subgraph Detectors["Detector Pipeline (src/detectors/)"]
         D_Scope["Scope Detector<br/>(modify, read_only, !exclusions, implicit .intent)"]
         D_Symbol["Symbol Scope Detector<br/>(TS Compiler AST, Python AST, Qualified Symbols)"]
-        D_Dep["Dependencies & Supply Chain<br/>(npm, pip, go, cargo, maven, gradle, dotnet, ruby)"]
+        D_Dep["Dependencies and Supply Chain<br/>(npm, pip, go, cargo, maven, gradle, dotnet, ruby)"]
         D_Risk["High-Risk Files<br/>(CI, IaC, K8s, Agent Rules, .env, Configurable)"]
-        D_Test["Test Weakening & Tautology<br/>(Assertion Loss, pytest.approx, Skip, @Disabled)"]
+        D_Test["Test Weakening and Tautology<br/>(Assertion Loss, pytest.approx, Skip, @Disabled)"]
         D_Arch["Architecture Drift<br/>(Mermaid, C4, Draw.io, TS/Py/Go/JVM/C# Imports)"]
     end
 

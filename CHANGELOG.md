@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.2] - 2026-10-28
+
+### Fixed
+- **Transparent Monochromatic Activity Bar Icon**:
+  - Replaced solid `icon.png` in `viewsContainers.activitybar` and `views.intent-contract-sidebar` with a native 24x24 vector SVG icon (`media/activitybar.svg`).
+  - Uses `fill="currentColor"` on a transparent background, eliminating the solid black square artifact in the left rail and rendering a crisp, theme-aware shield symbol.
+- **Mermaid Flowchart Subgraph DOM Alignment**:
+  - Refactored `Lifecycle & Architecture Flow` diagram in `docs/vibe-coding-guide.md`.
+  - Moved cross-subgraph transitions outside cluster blocks to avoid duplicate cluster parent assignments in Mermaid's layout engine.
+  - Replaced unescaped `&` characters with semantic words, resolving the `Cannot read properties of null (reading 'getAttribute')` rendering crash in VS Code / Antigravity IDE Markdown previewers.
+
+---
+
 ## [0.4.1] - 2026-10-28
 
 ### Fixed & Improved

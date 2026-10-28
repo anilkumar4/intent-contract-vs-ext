@@ -22,29 +22,44 @@ While this drastically boosts development velocity, it introduces critical failu
 ```mermaid
 flowchart TD
     subgraph S1["1. Contract Definition"]
-        A["Author .intent/contract.yaml"] --> B["Define Scope & Protections"]
+        A["Author .intent/contract.yaml"]
+        B["Define Scope and Protections"]
+        A --> B
     end
     subgraph S2["2. Baseline Lock"]
-        B --> C["intent-contract start"]
-        C --> D["Git Snapshot Baseline Locked"]
+        C["intent-contract start"]
+        D["Git Snapshot Baseline Locked"]
+        C --> D
     end
     subgraph S3["3. Autonomous Vibe Coding"]
-        D --> E["Prompt AI Agent (Cursor / Copilot / Claude / Antigravity)"]
-        E --> F["AI Modifies Workspace Files"]
+        E["Prompt AI Agent - Cursor, Copilot, Claude, Antigravity"]
+        F["AI Modifies Workspace Files"]
+        E --> F
     end
     subgraph S4["4. Real-Time Detection"]
-        F --> G{"Background Engine Verification"}
-        G -->|"Violations Found"| H["VS Code Squiggles & Explorer Tree"]
-        H --> I["Developer Actions: Revert / Waive / Direct Agent"]
-        I --> F
-        G -->|"Compliant"| J["Clean Diagnostics"]
+        G{"Background Engine Verification"}
+        H["VS Code Squiggles and Explorer Tree"]
+        I["Developer Actions: Revert, Waive, Direct Agent"]
+        J["Clean Diagnostics"]
+        G -->|"Violations Found"| H
+        H --> I
+        G -->|"Compliant"| J
     end
     subgraph S5["5. Guarded Delivery"]
-        J --> K["intent-contract check --index"]
-        K --> L["git commit (pre-commit hook)"]
-        L --> M["git push (pre-push hook verifies commit SHA)"]
-        M --> N["Production Ready"]
+        K["intent-contract check --index"]
+        L["git commit - pre-commit hook"]
+        M["git push - pre-push hook"]
+        N["Production Ready"]
+        K --> L
+        L --> M
+        M --> N
     end
+
+    B --> C
+    D --> E
+    F --> G
+    I --> F
+    J --> K
 ```
 
 ---
