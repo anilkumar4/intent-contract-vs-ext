@@ -25,6 +25,8 @@ import { MissionControlDashboardPanel } from "./ui/dashboard";
 import { ArchitectureInspectorPanel } from "./ui/architectureInspector";
 import { addSymbolToScope, addFileToScope, markFileReadOnly } from "./ui/scopeHelpers";
 import { IntentContractCodeLensProvider } from "./ui/codeLens";
+import { IntentContractCodeActionProvider } from "./ui/quickFix";
+import { generateComplianceReport } from "./state/report";
 import { syncActiveContractToAgents, clearActiveContractFromAgents } from "./config/agentSync";
 import { toRepoPath } from "./util/paths";
 import { configureAgentIntegrations, type AgentIntegration } from "./config/agentConfig";
@@ -77,7 +79,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }));
   context.subscriptions.push(
     codeLensProvider,
-    vscode.languages.registerCodeLensProvider({ scheme: "file" }, codeLensProvider)
+    vscode.languages.registerCodeLensProvider({ scheme: "file" }, codeLensProvider),
+    vscode.languages.registerCodeActionsProvider(
+      { scheme: "file" },
+      new IntentContractCodeActionProvider({
+        getRoot: () => root,
+        getFindings: () => findings
+      }),
+      {
+        providedCodeActionKinds: IntentContractCodeActionProvider.providedCodeActionKinds
+      }
+    )
   );
 
   const provider = new BaselineContentProvider(
@@ -193,12 +205,124 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand("intentContract.revertFile", async (value?: unknown) => revertFindingFile(unwrapFinding(value) ?? await chooseCurrentFinding(), actionContext)),
     vscode.commands.registerCommand("intentContract.waiveFinding", (value?: unknown) => waiveFinding(unwrapFinding(value), actionContext)),
-    vscode.commands.registerCommand("intentContract.statusClick", async () => {
-      if (!session) return vscode.commands.executeCommand("intentContract.start");
+    vscode.commands.registerCommand("intentContract.exportReport", async () => {
+      if (!root || !session || !contract) {
+        void vscode.window.showWarningMessage("Start an Intent Contract session before exporting a compliance report.");
+        return;
+      }
       try {
-        return await vscode.commands.executeCommand("intentContractFindings.focus");
-      } catch {
-        return await vscode.commands.executeCommand("workbench.view.extension.intent-contract-sidebar");
+        const reportPath = await generateComplianceReport({
+          root,
+          session,
+          contract,
+          changes,
+          findings,
+          waivers
+        });
+        const uri = vscode.Uri.file(reportPath);
+        try {
+          await vscode.commands.executeCommand("markdown.showPreview", uri);
+        } catch {
+          const doc = await vscode.workspace.openTextDocument(uri);
+          await vscode.window.showTextDocument(doc);
+        }
+        void vscode.window.showInformationMessage(`Exported session compliance report to ${path.relative(root, reportPath)}.`);
+      } catch (err) {
+        void vscode.window.showErrorMessage(`Could not generate compliance report: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }),
+    vscode.commands.registerCommand("intentContract.statusClick", async () => {
+      const activeFindings = findings.filter((f) => !waivers.has(f.id));
+      const items: Array<vscode.QuickPickItem & { action: () => Promise<void> | void }> = [];
+
+      if (session && contract) {
+        items.push({
+          label: `$(shield) Intent: ${contract.name}`,
+          description: activeFindings.length === 0 ? "✅ 100% Compliant (0 findings)" : `⚠️ ${activeFindings.length} active finding(s)`,
+          detail: `Intent: "${contract.intent}"`,
+          action: () => { void vscode.commands.executeCommand("intentContract.openDashboard"); }
+        });
+        items.push({
+          label: "$(dashboard) Open Mission Control Dashboard",
+          description: "Live scorecards, metrics, and corrective prompt generator",
+          action: () => { void vscode.commands.executeCommand("intentContract.openDashboard"); }
+        });
+        if (contract.architecture) {
+          items.push({
+            label: "$(graph) View Architecture Drift Inspector",
+            description: "Interactive visual diagram overlay with green/red boundary edges",
+            action: () => { void vscode.commands.executeCommand("intentContract.visualizeArchitecture"); }
+          });
+        }
+        items.push({
+          label: "$(copy) Copy Corrective Prompt for AI Agent",
+          description: "Format active findings for Cursor, Claude Code, Copilot, or Antigravity",
+          action: () => { void copyFindingsForAgent(actionContext); }
+        });
+        items.push({
+          label: "$(report) Export Session Compliance Report",
+          description: "Generate verified AI safety report in .intent/reports/",
+          action: () => { void vscode.commands.executeCommand("intentContract.exportReport"); }
+        });
+        items.push({
+          label: "$(refresh) Re-check Workspace Now",
+          description: "Manually trigger contract verification against baseline snapshot",
+          action: () => { void runCheck(); }
+        });
+        items.push({
+          label: "$(stop-circle) Stop Contract Session",
+          description: "End active session and clear baseline snapshot",
+          action: () => { void stopContract(); }
+        });
+      } else {
+        items.push({
+          label: "$(play) Start Contract Session...",
+          description: "Choose and lock a contract from .intent/",
+          action: () => { void startContract(); }
+        });
+        items.push({
+          label: "$(symbol-event) Visual Contract Builder",
+          description: "Create a task contract interactively without YAML",
+          action: () => {
+            if (extensionContext) {
+              void VisualContractBuilderPanel.createOrShow(extensionContext.extensionUri, async (name) => {
+                await startContractByName(name);
+              });
+            }
+          }
+        });
+        items.push({
+          label: "$(rocket) Getting Started Walkthrough",
+          description: "Interactive 5-step onboarding guide",
+          action: () => { void vscode.commands.executeCommand("intentContract.openWalkthrough"); }
+        });
+        items.push({
+          label: "$(book) Open Vibe Coding Guide",
+          description: "Best practices and prompt rules for autonomous agents",
+          action: () => {
+            if (extensionContext) void openVibeCodingGuide(extensionContext);
+          }
+        });
+      }
+
+      items.push({
+        label: "$(layout-sidebar-left) Focus Intent Contract Sidebar",
+        description: "Open the dedicated sidebar tree view",
+        action: async () => {
+          try {
+            await vscode.commands.executeCommand("intentContractFindings.focus");
+          } catch {
+            await vscode.commands.executeCommand("workbench.view.extension.intent-contract-sidebar");
+          }
+        }
+      });
+
+      const selected = await vscode.window.showQuickPick(items, {
+        placeHolder: session ? `Intent Contract: ${contract?.name} (${activeFindings.length} findings)` : "Intent Contract (Inactive)"
+      });
+
+      if (selected) {
+        await selected.action();
       }
     })
   );

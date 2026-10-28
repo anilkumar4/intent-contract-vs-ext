@@ -55,6 +55,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Preserves user custom instructions outside managed comment blocks and cleans up automatically when sessions stop.
 - **Full Architectural & UX Documentation Overhaul**:
   - Updated `docs/intent-contract-architecture.md` and `README.md` with complete architectural diagrams, UI layers, CodeLens mechanics, and MCP 2.0 autonomous agent correction loops.
+- **Interactive Quick-Fix Code Actions (`src/ui/quickFix.ts`)**:
+  - Native VS Code QuickFix (`Ctrl+.` / 💡) actions on active contract diagnostics to add files to scope, revert files to baseline, add symbols to modify scope, or inspect in the Architecture Inspector.
+- **Interactive Status Bar HUD & Quick Switcher**:
+  - Clicking the Status Bar shield opens a rich quick-action launcher with live session status, 1-click dashboard navigation, agent prompt copying, compliance report generation, manual recheck, and contract switching.
+- **Session Audit & Compliance Report Generator (`src/state/report.ts`)**:
+  - Added `Intent Contract: Export Session Compliance Report` (`intentContract.exportReport`).
+  - Generates enterprise-ready compliance certificates in `.intent/reports/compliance-report-<timestamp>.md` with an AI Safety Scorecard across 5 dimensions, modified files ledger, and cryptographic Git audit seal.
 
 ### Fixed
 - **Symbol Scope Attribution for Local Variables**:

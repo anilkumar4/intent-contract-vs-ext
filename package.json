@@ -110,6 +110,11 @@
         "command": "intentContract.markFileReadOnly",
         "title": "Intent Contract: Mark File as Read-Only",
         "icon": "$(lock)"
+      },
+      {
+        "command": "intentContract.exportReport",
+        "title": "Intent Contract: Export Session Compliance Report",
+        "icon": "$(report)"
       }
     ],
     "viewsContainers": {

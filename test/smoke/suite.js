@@ -22,7 +22,8 @@ exports.run = async function runSmoke() {
     "intentContract.markFileReadOnly",
     "intentContract.visualBuilder",
     "intentContract.openGuide",
-    "intentContract.openWalkthrough"
+    "intentContract.openWalkthrough",
+    "intentContract.exportReport"
   ]) {
     assert.ok(commands.includes(command), `Expected command ${command} to be registered.`);
   }
