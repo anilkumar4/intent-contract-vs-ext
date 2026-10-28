@@ -156,6 +156,11 @@
           "type": "object",
           "default": {},
           "description": "Rule-specific severity overrides."
+        },
+        "intentContract.enableCodeLens": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show ambient in-editor Intent Contract status and scope actions at the top of active files."
         }
       }
     },

@@ -56,6 +56,12 @@ The extension host must support the VS Code `extensionHost` debug configuration.
 
 ## Commands and baseline
 
+- **Open Mission Control Dashboard**: Launches the interactive mission control webview with real-time health scorecards across scope, tests, dependencies, and architecture, with 1-click corrective prompt generation and out-of-scope reverts.
+- **View Architecture Drift Inspector**: Renders an interactive Mermaid diagram overlay with green allowed edges, highlighted red violation arrows, breach details, and direct "Jump to Line" action buttons.
+- **Visual Contract Builder**: Creates task contracts interactively via a form webview without hand-editing YAML.
+- **Ambient In-Editor CodeLens**: Shows non-intrusive status indicators at line 1 of files during active sessions (`In-Scope`, `Read-Only`, `Out of Scope`) with quick actions.
+- **In-Editor Scope Helpers**: Right-click context actions (`Add Symbol to Active Scope`, `Add File to Active Scope`, `Mark File as Read-Only`) with live Git baseline synchronization.
+- **Dynamic Agent Prompt Hot-Sync**: Automatically injects active contract constraints into Cursor, Claude Code, GitHub Copilot, and Google Antigravity rule files during active sessions.
 - **Configure AI Agents & MCP** adds the local stdio MCP server and agent instructions to selected Cursor, Antigravity, Claude Code, GitHub Copilot, and Git pre-commit and pre-push hook configurations.
 - **Open Vibe Coding Guide**: Opens the comprehensive best practices guide inside VS Code in markdown preview or via the $(book) icon in the Intent Contract Findings panel.
 - **Git Push & Commit Blocking**: Installing the Git hooks automatically verifies active contracts on `git commit` and `git push`, blocking pushes and commits whenever error findings exist until they are resolved or authorized waivers are recorded.
@@ -84,7 +90,7 @@ The build produces `dist/cli.js` and `dist/mcp-server.js` alongside the VS Code 
     node dist/cli.js guide
     node dist/cli.js stop
 
-The CLI reads the contract from the same policy tree it checks: the selected `--base`, the active session baseline, or `HEAD`. The contract path must exist in that tree. This keeps a change from weakening its own policy during a check. `check --index` verifies the staged Git index; `check --revision <sha>` verifies a local commit tree, as used by the pre-push hook. The check command returns exit code 1 when unwaived error findings exist. Formats are text, json, and GitHub Actions annotations. The MCP server uses JSON-RPC over stdio and exposes `get_active_contract`, `verify_intent_contract`, `revert_out_of_scope_files`, and `start_intent_contract`.
+The CLI reads the contract from the same policy tree it checks: the selected `--base`, the active session baseline, or `HEAD`. The contract path must exist in that tree. This keeps a change from weakening its own policy during a check. `check --index` verifies the staged Git index; `check --revision <sha>` verifies a local commit tree, as used by the pre-push hook. The check command returns exit code 1 when unwaived error findings exist. Formats are text, json, and GitHub Actions annotations. The MCP server uses JSON-RPC over stdio and exposes `get_active_contract`, `verify_intent_contract`, `get_remediation_instructions`, `revert_out_of_scope_files`, `self_heal_contract`, and `start_intent_contract`.
 
 ## Development checks
 

@@ -47,6 +47,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MCP 2.0 Autonomous Agent Self-Healing Tools (Option D)**:
   - Added `get_remediation_instructions` tool to provide structured, actionable step-by-step guidance for autonomous agents (Cursor, Claude Code, GitHub Copilot, Google Antigravity).
   - Added `self_heal_contract` tool for autonomous remediation, safely reverting out-of-scope file modifications while preserving valid in-scope progress.
+- **Ambient In-Editor Scope CodeLens**:
+  - Non-intrusive status indicators at line 1 of files during active sessions (`🛡️ Intent: In-Scope`, `🔒 Intent: Read-Only`, `⚠️ Intent: Out of Scope`) with 1-click quick actions to add to scope or lock as read-only.
+  - Added `intentContract.enableCodeLens` configuration setting (enabled by default).
+- **Dynamic Agent Prompt Hot-Sync Engine**:
+  - Automatically syncs active task intent, permitted file globs, symbols, and forbidden policies into active agent instruction files (Cursor `.cursor/rules/`, Google Antigravity `.agents/rules/`, Claude Code `CLAUDE.md`, and GitHub Copilot `.github/copilot-instructions.md`).
+  - Preserves user custom instructions outside managed comment blocks and cleans up automatically when sessions stop.
+- **Full Architectural & UX Documentation Overhaul**:
+  - Updated `docs/intent-contract-architecture.md` and `README.md` with complete architectural diagrams, UI layers, CodeLens mechanics, and MCP 2.0 autonomous agent correction loops.
 
 ### Fixed
 - **Symbol Scope Attribution for Local Variables**:

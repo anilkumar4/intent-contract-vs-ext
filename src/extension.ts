@@ -24,6 +24,8 @@ import { VisualContractBuilderPanel } from "./ui/visualBuilder";
 import { MissionControlDashboardPanel } from "./ui/dashboard";
 import { ArchitectureInspectorPanel } from "./ui/architectureInspector";
 import { addSymbolToScope, addFileToScope, markFileReadOnly } from "./ui/scopeHelpers";
+import { IntentContractCodeLensProvider } from "./ui/codeLens";
+import { syncActiveContractToAgents, clearActiveContractFromAgents } from "./config/agentSync";
 import { toRepoPath } from "./util/paths";
 import { configureAgentIntegrations, type AgentIntegration } from "./config/agentConfig";
 
@@ -42,6 +44,7 @@ let checkTimer: ReturnType<typeof setTimeout> | undefined;
 let statusBar: ContractStatusBar;
 let treeProvider: FindingsTreeProvider;
 let diagnostics: FindingDiagnostics;
+let codeLensProvider: IntentContractCodeLensProvider;
 let architecturePreviewText = "";
 let architecturePreviewEmitter: vscode.EventEmitter<vscode.Uri>;
 let architecturePreviewUri: vscode.Uri;
@@ -65,6 +68,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   context.subscriptions.push(vscode.window.registerTreeDataProvider("intentContractFindings", treeProvider));
+
+  codeLensProvider = new IntentContractCodeLensProvider(() => ({
+    root,
+    session,
+    contract,
+    findings
+  }));
+  context.subscriptions.push(
+    codeLensProvider,
+    vscode.languages.registerCodeLensProvider({ scheme: "file" }, codeLensProvider)
+  );
 
   const provider = new BaselineContentProvider(
     () => root,
@@ -317,8 +331,10 @@ async function startContract(): Promise<void> {
   };
   contract = await loadContractFromBaseline(repoRoot, session);
   await writeSession(repoRoot, session);
+  void syncActiveContractToAgents(repoRoot, selectedContract);
   void vscode.window.showInformationMessage(`Started contract "${selectedContract.name}" from the current working tree.`);
   await runCheck();
+  codeLensProvider?.refresh();
 }
 
 async function startContractByName(name: string): Promise<void> {
@@ -354,8 +370,10 @@ async function startContractByName(name: string): Promise<void> {
   };
   contract = await loadContractFromBaseline(repoRoot, session);
   await writeSession(repoRoot, session);
+  void syncActiveContractToAgents(repoRoot, selectedContract);
   void vscode.window.showInformationMessage(`Started contract "${selectedContract.name}" from the current working tree.`);
   await runCheck();
+  codeLensProvider?.refresh();
 }
 
 async function stopContract(): Promise<void> {
@@ -381,6 +399,8 @@ async function stopContract(): Promise<void> {
   statusBar.update(undefined, []);
   if (MissionControlDashboardPanel.currentPanel) void MissionControlDashboardPanel.currentPanel.refresh();
   if (ArchitectureInspectorPanel.currentPanel) void ArchitectureInspectorPanel.currentPanel.refresh();
+  if (root) void clearActiveContractFromAgents(root);
+  codeLensProvider?.refresh();
   void vscode.window.showInformationMessage("Stopped the active Intent Contract.");
 }
 
@@ -470,6 +490,7 @@ async function performCheck(): Promise<void> {
       statusBar?.update(undefined, []);
       if (MissionControlDashboardPanel.currentPanel) void MissionControlDashboardPanel.currentPanel.refresh();
       if (ArchitectureInspectorPanel.currentPanel) void ArchitectureInspectorPanel.currentPanel.refresh();
+      codeLensProvider?.refresh();
     }
     return;
   }
@@ -518,6 +539,7 @@ async function performCheck(): Promise<void> {
 
     if (MissionControlDashboardPanel.currentPanel) void MissionControlDashboardPanel.currentPanel.refresh();
     if (ArchitectureInspectorPanel.currentPanel) void ArchitectureInspectorPanel.currentPanel.refresh();
+    codeLensProvider?.refresh();
 
     output.appendLine(`[${new Date().toISOString()}] Checked ${diff.changes.length} changed file(s); ${active.length} active finding(s).`);
   } catch (error) {

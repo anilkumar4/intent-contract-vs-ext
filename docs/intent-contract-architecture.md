@@ -44,10 +44,19 @@ The following diagram illustrates how the VS Code extension, the CLI, and the MC
 ```mermaid
 flowchart TD
     subgraph Clients["Clients & Interfaces"]
-        IDE["VS Code / Cursor Extension<br/>(Diagnostics, Findings Tree, Baseline Diff, Status Bar)"]
+        IDE["VS Code & Cursor UI<br/>(Activity Bar, CodeLens, Diagnostics, Diff Provider)"]
         CLI["Headless CLI (`intent-contract`)<br/>(Start, Check, Revert, Hook, CI --base)"]
-        MCP["Model Context Protocol (MCP) Server<br/>(Cursor, Claude Code, Antigravity, Copilot)"]
+        MCP["Model Context Protocol (MCP 2.0) Server<br/>(Cursor, Claude Code, Antigravity, Copilot)"]
         HOOKS["Git Hooks (`pre-commit`, `pre-push`)<br/>(Blocks commit/push on active contract errors)"]
+    end
+
+    subgraph UILayer["UI & Developer Experience (src/ui/)"]
+        Dashboard["Mission Control Dashboard<br/>(Live scorecards, Change stats, 1-click Agent prompt)"]
+        ArchInspector["Visual Architecture Drift Inspector<br/>(Interactive graph overlay, Jump-to-line, Revert)"]
+        VisualBuilder["Visual Contract Builder<br/>(Interactive form wizard, Workspace scan)"]
+        CodeLens["Ambient In-Editor CodeLens<br/>(In-Scope, Read-Only, Out-of-Scope actions)"]
+        ScopeHelpers["In-Editor Scope Helpers<br/>(Add Symbol, Add File, Lock Read-Only)"]
+        AgentSync["Dynamic Agent Prompt Hot-Sync<br/>(Cursor, Claude, Copilot, Antigravity)"]
     end
 
     subgraph Runtime["Shared Core Runtime (src/runtime/)"]
@@ -62,6 +71,7 @@ flowchart TD
         Snapshot["Snapshot Engine<br/>(Temporary Index via GIT_INDEX_FILE, git add -f)"]
         DiffEngine["Diff Engine<br/>(git diff-tree, parallel git cat-file blob)"]
         RevertEngine["Revert Engine<br/>(Byte-exact baseline restore)"]
+        BaselineSync["Baseline Tree Updater<br/>(updateContractInBaseline via applyCandidatePaths)"]
     end
 
     subgraph Detectors["Detector Pipeline (src/detectors/)"]
@@ -73,6 +83,9 @@ flowchart TD
         D_Arch["Architecture Drift<br/>(Mermaid, C4, Draw.io, TS/Py/Go/JVM/C# Imports)"]
     end
 
+    IDE --> UILayer
+    UILayer --> Runtime
+    UILayer --> BaselineSync
     IDE --> Lifecycle
     IDE --> VerificationEngine
     CLI --> VerificationEngine
@@ -268,9 +281,89 @@ sequenceDiagram
 
 ---
 
-## 7. Tamper-Evident Waivers & Policy Integrity
+## 7. UI & Developer Experience Suite
 
-### 7.1. Waiver Integrity
+To maximize productivity for developers, vibe coders, and AI engineers, Intent Contract provides a complete interactive visual toolset directly inside VS Code and Cursor.
+
+### 7.1. Live Mission Control Dashboard (`src/ui/dashboard.ts`)
+The Mission Control Dashboard (`Intent Contract: Open Mission Control Dashboard` / `intentContract.openDashboard`) provides a high-level command center during vibe coding:
+- **Health Scorecards**: Real-time evaluation across **Scope Adherence**, **Test Fidelity**, **Dependency Security**, and **Architecture Boundaries**.
+- **1-Click Agent Prompt Generator**: Compiles all active violations, diff hunks, and exact remediation instructions formatted as a high-priority prompt for immediate injection into Cursor, Claude Code, GitHub Copilot, or Google Antigravity.
+- **One-Click Reverts & Session Controls**: Instant action buttons to revert all out-of-scope files, re-verify the workspace, or stop the contract session.
+
+### 7.2. Visual Architecture Drift Inspector (`src/ui/architectureInspector.ts`)
+The Architecture Drift Inspector (`Intent Contract: View Architecture Drift Inspector` / `intentContract.visualizeArchitecture`) renders live system architecture diagrams overlaid with compliance telemetry:
+- **Interactive Mermaid Overlay**: Allowed architectural boundaries are drawn in solid green; unauthorized cross-module imports appear as highlighted, pulsing red dashed arrows with source/target labels.
+- **Breach Triage Table**: Details each detected breach (`Source Module` ➔ `Target Module`, offending file, line number, and target import).
+- **Interactive Action Buttons**: Includes **📍 Jump to Line** (opens the offending file at the exact import statement) and **⏪ Revert** (rolls back the offending file to the baseline).
+
+### 7.3. Visual Contract Builder & Native Walkthrough
+- **Visual Contract Builder (`src/ui/visualBuilder.ts`)**: An interactive form Webview that lets developers visually select workspace folders, configure allowed file globs, pick active symbols, declare forbidden risks, and assign architecture node mappings without manually authoring YAML.
+- **Native VS Code Walkthrough (`walkthrough/*.md`)**: Integrated into VS Code's Welcome experience to guide new developers through task boundary definition, agent connection, and safe pushing within their first 60 seconds.
+
+### 7.4. Ambient In-Editor CodeLens & Scope Helpers
+- **Ambient CodeLens (`src/ui/codeLens.ts`)**: Displays non-intrusive status indicators at line 1 of every file during active sessions:
+  - `🛡️ Intent: In-Scope (Modify)` | `[Lock Read-Only]`
+  - `🔒 Intent: Read-Only` | `[Allow Editing]`
+  - `⚠️ Intent: Out of Scope` | `[➕ Add File to Scope]` | `[🔒 Mark Read-Only]`
+- **Scope Context Helpers (`src/ui/scopeHelpers.ts`)**: Right-click actions in the editor and file explorer (`Add Symbol to Active Scope`, `Add File to Active Scope`, `Mark File as Read-Only`).
+- **Dynamic Baseline Tree Synchronization (`src/git/snapshot.ts`)**: Automatically writes updated contracts directly to the Git policy tree using `updateContractInBaseline()` without resetting the session or losing baseline diff history.
+
+### 7.5. Dynamic Agent Prompt Hot-Sync (`src/config/agentSync.ts`)
+- Automatically propagates the active contract's intent, permitted file globs, permitted symbols, and forbidden rules into active agent instruction files:
+  - Cursor: `.cursor/rules/intent-contract.mdc`
+  - Google Antigravity: `.agents/rules/intent-contract.md`
+  - Claude Code: `CLAUDE.md`
+  - GitHub Copilot: `.github/copilot-instructions.md`
+- Preserves user custom instructions outside managed `<!-- INTENT_CONTRACT_ACTIVE_TASK -->` comment blocks and automatically cleans up when the contract session stops.
+
+---
+
+## 8. Model Context Protocol (MCP 2.0) Architecture & Autonomous Self-Healing
+
+The Intent Contract MCP server runs as a standard stdio JSON-RPC server (`intent-contract-mcp`), allowing autonomous agents to verify their own code and self-heal hallucinations.
+
+### 8.1. Supported MCP Tools
+| Tool Name | Parameters | Purpose |
+|---|---|---|
+| `get_active_contract` | None | Returns the active contract definition, intent, allowed modify globs, read-only paths, symbols, and architecture rules. |
+| `verify_intent_contract` | None | Runs verification against current working tree, returning pass/fail status, violation counts, and structured remediation instructions. |
+| `get_remediation_instructions` | None | Returns step-by-step guidance for each active finding to help agents correct code without trial-and-error. |
+| `revert_out_of_scope_files` | `files?: string[]` | Restores out-of-scope files to baseline without changing the Git staging index. |
+| `self_heal_contract` | None | **Autonomous remediation tool**: Reverts out-of-scope files automatically and re-checks the contract, reporting healed status. |
+| `start_intent_contract` | `name: string` | Starts a named contract from `.intent/` when explicitly requested by the user. |
+
+### 8.2. Autonomous Agent Self-Correction Loop
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Dev as Developer / Prompt
+    participant Agent as Autonomous AI Agent
+    participant MCP as Intent Contract MCP Server
+    participant Git as Git Baseline Engine
+
+    Dev->>Agent: "Implement billing invoice refund"
+    Agent->>MCP: get_active_contract()
+    MCP-->>Agent: Active contract scope (modify: [src/billing/**])
+
+    Note over Agent: Agent edits billing & accidentally touches auth config
+
+    Agent->>MCP: verify_intent_contract()
+    MCP-->>Agent: Failed: 1 scope violation (src/auth/config.ts)
+
+    Agent->>MCP: self_heal_contract()
+    MCP->>Git: Revert src/auth/config.ts to baseline
+    MCP->>MCP: Re-verify workspace
+    MCP-->>Agent: Healed! All remaining edits are 100% compliant
+
+    Agent-->>Dev: Task complete with 0 contract violations
+```
+
+---
+
+## 9. Tamper-Evident Waivers & Policy Integrity
+
+### 9.1. Waiver Integrity
 - Waivers live in `.intent/waivers.json`.
 - Each waiver record binds to the deterministic finding ID (hash of detector, file, rule, and diff evidence):
   ```json
@@ -286,7 +379,7 @@ sequenceDiagram
 
 ---
 
-## 8. CLI Reference & CI/CD Integration
+## 10. CLI Reference & CI/CD Integration
 
 ### CLI Commands
 ```bash
@@ -339,7 +432,7 @@ jobs:
 
 ---
 
-## 9. Summary: Why Intent Contract is Built for Modern AI Engineering
+## 11. Summary: Why Intent Contract is Built for Modern AI Engineering
 
 | Feature | Without Intent Contract | With Intent Contract |
 | --- | --- | --- |
