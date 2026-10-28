@@ -11,37 +11,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **Sub-Second Diagnostic Latency**:
-  - Reduced default debounce from 800 ms to 300 ms (`intentContract.debounce`).
-  - Cached repository `.git/index` path resolution to eliminate redundant `git rev-parse` subprocesses.
-  - Pathspec-filtered ignored file scans that skip massive directories like `node_modules`, `dist`, and `.vscode-test`, cutting `git status` scan time from ~600 ms to ~75 ms.
-  - Parallelized `git diff-tree` and `git diff` execution in `diffTrees()` via `Promise.all` with a 0 ms fast exit when tree hashes match.
-  - Session cache guard in `performCheck()` to prevent unnecessary Git ref verification on routine keystrokes.
-  - End-to-end check latency is now **~600–900 ms** (well below the 1.5-second target).
-- **Stable MCP Launcher**:
-  - Implemented `ensureStableMcpLauncher()` in `src/config/agentConfig.ts`.
-  - Generated MCP server entrypoints now create a durable, unversioned proxy launcher at `.vscode/extensions/anilkumar4.intent-contract/dist/mcp-server.js`.
-  - At runtime, the launcher dynamically inspects `.vscode/extensions/` for the latest installed version and delegates execution, completely surviving extension upgrades without `MODULE_NOT_FOUND`.
-- **Git Staging & Push Verification**:
-  - Added `--index` flag to `intent-contract check` for verifying candidate trees staged in the Git index.
-  - Added `--revision <sha>` flag to `intent-contract check` for verifying exact commit trees being pushed.
-  - `pre-commit` hook automatically checks `--index`.
-  - `pre-push` hook reads Git stdin stream (`local_ref local_sha remote_ref remote_sha`) and checks each non-zero local commit SHA with `--revision`, blocking unauthorized code before it leaves the developer's workstation.
-  - Added `materializeTree()` for isolated candidate checkouts without modifying the workspace or real Git index.
-- **Enterprise 5-Column Architecture Diagram**:
-  - Redesigned `docs/intent-contract-architecture.drawio` with clean orthogonal routing, strict directional swimlanes, and zero overlapping lines or crossed connectors.
+  - Reduced default diagnostic debounce from 800 ms to 300 ms (`intentContract.debounce`).
+  - Optimized file change detection to skip large un-tracked directories like `node_modules` and build outputs, cutting status scan times by over 80%.
+  - Parallelized Git tree comparison engine with fast-exit optimizations for unchanged trees.
+  - Overall end-to-end contract verification latency is now **~600–900 ms** (well below the 1.5-second target).
+- **Resilient MCP Server Configuration**:
+  - Generated Model Context Protocol (MCP) server configurations now survive extension updates without breaking or pointing to stale versioned folders.
+  - Automatically maintains backward compatibility across extension upgrades.
+- **Git Staging & Push Guardrails**:
+  - Added `--index` flag to `intent-contract check` for verifying candidate changes staged in the Git index prior to commit.
+  - Added `--revision <commit-sha>` flag to `intent-contract check` for verifying exact commits during Git push operations.
+  - Enhanced `pre-commit` hook to automatically check staged index changes.
+  - Enhanced `pre-push` hook to verify each commit SHA being pushed to remote branches, blocking unauthorized changes or weakened tests from leaving the local machine.
+- **Enterprise Architecture Diagrams**:
+  - Clean 5-column orthogonal layout design for system architecture diagrams with clear directional swimlanes and module boundaries.
 - **Vibe Coding Best Practices Guide**:
-  - Added comprehensive guide in `docs/vibe-coding-guide.md` and root `README.md` overview detailing how Intent Contract guards developers against scope creep, test weakening, supply-chain risks, and architecture drift when vibe coding with Cursor, Claude Code, GitHub Copilot, and Google Antigravity.
+  - Comprehensive guide and workflow documentation detailing how Intent Contract guards developers against silent scope creep, test weakening ("faking green"), supply-chain hallucinations, and architecture erosion when pairing with autonomous AI agents (Cursor, Claude Code, GitHub Copilot, and Google Antigravity).
 
 ### Fixed
-- **Symbol-Scope Local Variable Attribution**:
-  - Fixed regression in `src/detectors/symbolScope.ts` where changing local variables (e.g., `ratio` inside `prorate()`) was mistakenly attributed to a new symbol instead of the enclosing function.
-  - Restructured `topVarPattern` to strictly match top-level declarations (at brace depth 0 outside any function or method range).
+- **Symbol Scope Attribution for Local Variables**:
+  - Fixed an issue where modifying local variables inside an allowed function or method was incorrectly reported as an unauthorized symbol modification.
 - **Strict Exception Enforcement**:
-  - Bypassed persisted waivers in `waivers.json` when the baseline contract sets `allow_exceptions: false` across all CLI and MCP verification tools.
-- **Re-baselining Protection**:
-  - Guarded `startIntentContract` to reject restarts while a session is active unless explicit `--force` is supplied. Old baseline references are preserved until replacement baselines are safely persisted.
+  - Ensured persisted waivers are strictly ignored when the active contract sets `allow_exceptions: false`, preventing unauthorized waiver bypasses across CLI and MCP tools.
+- **Session Re-baselining Protection**:
+  - Guarded active contract sessions against accidental restarts or re-baselining unless explicit `--force` is provided, preserving baseline audit integrity.
 - **Dependency Security Audit**:
-  - Updated `zod` to `^4.6.7` and added `@azure/msal-node: 7.1.2` override, resolving all vulnerabilities (0 vulnerabilities reported by `npm audit`).
+  - Updated dependencies and resolved all reported vulnerabilities (0 vulnerabilities).
 
 ---
 

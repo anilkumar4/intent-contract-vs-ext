@@ -218,3 +218,4 @@ Select **Copilot** to generate `.github/copilot-instructions.md`. Copilot Chat a
 | `intent-contract waive <violation-id>` | Add a documented exception waiver to `.intent/waivers.json`. |
 | `intent-contract install-hooks` | Install `.git/hooks/pre-commit` and `pre-push` verification hooks. |
 | `intent-contract export-rules <agent>` | Export prompt rules for Cursor, Claude, Copilot, or Antigravity. |
+

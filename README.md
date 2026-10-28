@@ -17,7 +17,7 @@ However, autonomous agents introduce critical failure modes that standard linter
 | **Self-Approval Loopholes** | The agent tries to bypass restrictions by editing the contract file or adding fake waivers. | Policies are locked in Git's baseline tree object. Changes to `.intent/**` are treated as errors, and waivers are tamper-evident. |
 | **Accidental Bad Pushes** | Hallucinated code or weakened tests get pushed to remote branches before anyone notices. | The `pre-push` Git hook verifies the exact commit SHA being pushed and aborts the push if active violations exist. |
 
-See the complete [Vibe Coding Best Practices Guide](docs/vibe-coding-guide.md) for workflow tutorials and agent setups.
+See the complete [Vibe Coding Best Practices Guide](https://github.com/anilkumar4/intent-contract-vs-ext/blob/master/docs/vibe-coding-guide.md) for workflow tutorials and agent setups.
 
 ## Contract example
 
@@ -96,4 +96,4 @@ Test weakening, tautological-test detection, and symbol-level scope are included
 
 ## Project architecture
 
-See [the editable Draw.io architecture diagram](docs/intent-contract-architecture.drawio) and [the detailed architecture guide](docs/intent-contract-architecture.md) for module responsibilities, baseline and verification flows, architecture parsing, import resolution, and the extension/CLI/MCP integration.
+See [the editable Draw.io architecture diagram](https://github.com/anilkumar4/intent-contract-vs-ext/blob/master/docs/intent-contract-architecture.drawio) and [the detailed architecture guide](https://github.com/anilkumar4/intent-contract-vs-ext/blob/master/docs/intent-contract-architecture.md) for module responsibilities, baseline and verification flows, architecture parsing, import resolution, and the extension/CLI/MCP integration.
