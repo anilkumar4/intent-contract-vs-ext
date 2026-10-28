@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadContract, parseContract } from "../src/contract/loader";
+import { contractSchema } from "../src/contract/schema";
 import { createDefaultContract } from "../src/contract/template";
 
 const temporaryDirectories: string[] = [];
@@ -91,6 +92,24 @@ describe("contract loading", () => {
     expect(path.relative(root, created).replace(/\\/g, "/")).toBe(".intent/default.yaml");
     await expect(fs.readFile(created, "utf8")).resolves.toContain("scope:");
     await expect(fs.readFile(path.join(root, ".intent", ".gitignore"), "utf8")).resolves.toContain("waivers.json");
+  });
+
+  it("parses contracts constructed by visual builder payloads", () => {
+    const payload = {
+      name: "feature-billing",
+      intent: "Implement billing proration",
+      scope: {
+        modify: ["src/billing/**", "test/billing/**"],
+        read_only: ["src/billing/db.ts"],
+        modify_symbols: ["prorate", "calculateUpgradeDelta"]
+      },
+      forbid: ["test_weakening", "new_dependencies", "high_risk_files"],
+      allow_exceptions: true
+    };
+    const parsed = contractSchema.parse(payload);
+    expect(parsed.name).toBe("feature-billing");
+    expect(parsed.scope.modify_symbols).toEqual(["prorate", "calculateUpgradeDelta"]);
+    expect(parsed.allow_exceptions).toBe(true);
   });
 });
 

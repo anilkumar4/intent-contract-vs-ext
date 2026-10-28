@@ -17,6 +17,8 @@
     "Other"
   ],
   "activationEvents": [
+    "onStartupFinished",
+    "onView:intentContractFindings",
     "workspaceContains:.intent/*.yaml",
     "workspaceContains:.intent/*.yml"
   ],
