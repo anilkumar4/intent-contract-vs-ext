@@ -2,6 +2,23 @@
 
 Intent Contract captures a local Git tree as a task baseline and detects changes that violate a contract in `.intent/*.yaml`. It reports changes after they are written and provides a baseline restore action. It does not block writes. The active contract is read from the captured baseline; stop and start again to activate contract edits.
 
+## Why "Vibe Coding" Needs Intent Contract
+
+In the modern **Vibe Coding** era, developers prompt autonomous agents—such as **Cursor**, **Claude Code**, **GitHub Copilot**, and **Google Antigravity**—to build features at lightspeed. You describe what you want in natural language, and the agent writes dozens of files in seconds.
+
+However, autonomous agents introduce critical failure modes that standard linters and CI pipelines fail to catch:
+
+| Vibe Coding Risk | What AI Agents Frequently Do | How Intent Contract Protects You |
+|---|---|---|
+| **Silent Scope Creep** | The agent touches files outside the prompt's domain, edits configs, or modifies shared utility functions. | Flags any modification outside `scope.modify` or inside `scope.read_only`. Restricts changes down to specific AST function/method symbols via `scope.modify_symbols`. |
+| **Test Weakening ("Faking Green")** | When a test fails, the agent "fixes" it by changing `.toBe()` to `.toBeTruthy()`, widening numeric tolerances, or adding `.skip()`. | The Test Weakening detector catches net assertion loss, matcher downgrades, `@Disabled`/`t.Skip()`, and tautological tests instantly. |
+| **Supply-Chain Hallucinations** | The agent hallucinates or imports arbitrary npm/pip/Go packages or adds dangerous `postinstall` scripts. | Flags unauthorized dependencies, unpaired lockfile updates, and supply-chain risk scripts across 8 package ecosystems. |
+| **Architecture Erosion** | The agent bypasses architectural layers (e.g. billing module importing directly from database instead of shared service). | Evaluates codebase imports against your Mermaid or Draw.io architecture diagrams from baseline Git snapshots. |
+| **Self-Approval Loopholes** | The agent tries to bypass restrictions by editing the contract file or adding fake waivers. | Policies are locked in Git's baseline tree object. Changes to `.intent/**` are treated as errors, and waivers are tamper-evident. |
+| **Accidental Bad Pushes** | Hallucinated code or weakened tests get pushed to remote branches before anyone notices. | The `pre-push` Git hook verifies the exact commit SHA being pushed and aborts the push if active violations exist. |
+
+See the complete [Vibe Coding Best Practices Guide](docs/vibe-coding-guide.md) for workflow tutorials and agent setups.
+
 ## Contract example
 
 ```yaml

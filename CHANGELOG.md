@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `materializeTree()` for isolated candidate checkouts without modifying the workspace or real Git index.
 - **Enterprise 5-Column Architecture Diagram**:
   - Redesigned `docs/intent-contract-architecture.drawio` with clean orthogonal routing, strict directional swimlanes, and zero overlapping lines or crossed connectors.
+- **Vibe Coding Best Practices Guide**:
+  - Added comprehensive guide in `docs/vibe-coding-guide.md` and root `README.md` overview detailing how Intent Contract guards developers against scope creep, test weakening, supply-chain risks, and architecture drift when vibe coding with Cursor, Claude Code, GitHub Copilot, and Google Antigravity.
 
 ### Fixed
 - **Symbol-Scope Local Variable Attribution**:
@@ -74,3 +76,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Model Context Protocol (MCP) server with JSON-RPC stdio transport.
 - Git temporary index snapshot engine using `GIT_INDEX_FILE`.
 - Zero-dependency Mermaid and Draw.io architecture diagram parser.
+
