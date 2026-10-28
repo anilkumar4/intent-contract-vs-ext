@@ -96,7 +96,7 @@ A core design principle of Intent Contract is **clean, non-invasive Git mechanic
 ### 4.1. Baseline Capture via Temporary Git Index
 When a contract is started (`intentContract.start` or `intent-contract start <name>`):
 1. **Isolated Index**: The snapshot engine creates an isolated temporary index file via `GIT_INDEX_FILE`. The repository's actual `.git/index` is never read or written.
-2. **Working Tree Snapshot**: The temporary index stages the working directory, including untracked and unstaged files (`git add -A`). 
+2. **Working Tree Snapshot**: The temporary index stages the working directory, including untracked and unstaged files (`git add -A`).
 3. **Ignored Secret Inclusion**: Canonical secrets such as `.env` and `secrets/**` (which are typically in `.gitignore`) are force-added (`git add -f`) into the temporary index so that changes to existing environment configs are tracked.
 4. **Baseline Tree Hash**: `git write-tree` writes a Git tree object representing the baseline, and a reference is saved under `refs/intent/baselines/<id>` so Git's garbage collection does not purge it.
 5. **Session State**: The state is recorded in `.intent/.state.json` (which is automatically added to `.gitignore`).
@@ -144,7 +144,6 @@ sequenceDiagram
     participant Git as Git Engine
     participant Runtime as Shared Runtime
     participant Detectors as Detector Pipeline
-
     User->>Ext: Start Contract ("feature-billing")
     Ext->>Runtime: startIntentContract(root, "feature-billing")
     Runtime->>Git: Capture working tree baseline (temp index)
@@ -152,9 +151,7 @@ sequenceDiagram
     Runtime->>Git: Store ref refs/intent/baselines/...
     Runtime->>Runtime: Write .intent/.state.json
     Runtime-->>User: Contract active (Baseline locked)
-
     Note over User,Ext: Agent or Developer modifies source files
-
     User->>Ext: File saved / CLI check / git push
     Ext->>Git: Snapshot current working tree (temp index)
     Git-->>Ext: Current tree hash (e.g. 9c4d3e)
@@ -164,23 +161,19 @@ sequenceDiagram
     Detectors-->>Ext: List of Findings [Scope, Tests, Deps, etc.]
     Ext->>Runtime: Apply waivers (if allow_exceptions: true)
     Ext->>Runtime: Write .intent/.violations.md
-    
     alt Active Errors Exist
         Ext-->>User: Status: FAIL (Red Status Bar, Diagnostics, Exit 1, Push Blocked)
     else Clean or Only Warnings
         Ext-->>User: Status: PASS (Green Status Bar, Exit 0, Push Allowed)
     end
-
     opt Revert Violations
         User->>Ext: Revert File (UI or MCP)
         Ext->>Git: Restore baseline blob to disk
     end
-
     opt Waive Finding (if authorized)
         User->>Ext: Waive Finding (Reason + Timestamp)
         Ext->>Runtime: Append to .intent/waivers.json
     end
-
     User->>Ext: Stop Contract
     Ext->>Git: Release baseline ref
     Ext->>Runtime: Remove .state.json & .violations.md
