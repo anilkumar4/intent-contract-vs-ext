@@ -56,23 +56,29 @@ The extension host must support the VS Code `extensionHost` debug configuration.
 
 ## Commands and baseline
 
-- **Open Mission Control Dashboard**: Launches the interactive mission control webview with real-time health scorecards across scope, tests, dependencies, and architecture, with 1-click corrective prompt generation and out-of-scope reverts.
-- **View Architecture Drift Inspector**: Renders an interactive Mermaid diagram overlay with green allowed edges, highlighted red violation arrows, breach details, and direct "Jump to Line" action buttons.
-- **Visual Contract Builder**: Creates task contracts interactively via a form webview without hand-editing YAML.
-- **Ambient In-Editor CodeLens**: Shows non-intrusive status indicators at line 1 of files during active sessions (`In-Scope`, `Read-Only`, `Out of Scope`) with quick actions.
+- **Dedicated Activity Bar Container**: Access all sessions, active findings, and waived items from the dedicated Shield icon on the primary Activity Bar.
+- **Native Getting Started Walkthrough**: 5-step interactive onboarding walkthrough integrated natively into VS Code's Welcome experience to guide new developers through task boundary definition, agent connection, and safe pushing.
+- **Open Mission Control Dashboard**: Launches the interactive mission control webview with real-time health scorecards across scope, tests, dependencies, and architecture, with 1-click corrective prompt generation, out-of-scope reverts, and compliance report exporting.
+- **View Architecture Drift Inspector**: Renders an interactive Mermaid diagram overlay with green allowed edges, highlighted red violation arrows, breach details table, and direct "Jump to Line" action buttons.
+- **Visual Contract Builder**: Creates task contracts interactively via a form webview without hand-editing YAML, including workspace folder discovery and active editor symbol extraction.
+- **Interactive Quick-Fix CodeActions**: Hover over squiggles or press `Ctrl+.` / `Cmd+.` (💡) on diagnostics to instantly add files to scope, revert changes back to baseline, or add functions to `scope.modify_symbols`.
+- **Interactive Status Bar HUD**: Click the `$(shield)` item in the status bar to launch a command HUD for quick session controls, dashboard navigation, reports, and contract switching.
+- **Session Compliance Report**: Exports an enterprise-grade AI safety audit certificate in `.intent/reports/compliance-report-<timestamp>.md` with a 5-dimension scorecard, modified files ledger, and cryptographic Git audit seal.
+- **Ambient In-Editor CodeLens**: Shows non-intrusive status indicators at line 1 of files during active sessions (`🛡️ Intent: In-Scope`, `🔒 Intent: Read-Only`, `⚠️ Intent: Out of Scope`) with 1-click quick actions.
 - **In-Editor Scope Helpers**: Right-click context actions (`Add Symbol to Active Scope`, `Add File to Active Scope`, `Mark File as Read-Only`) with live Git baseline synchronization.
 - **Dynamic Agent Prompt Hot-Sync**: Automatically injects active contract constraints into Cursor, Claude Code, GitHub Copilot, and Google Antigravity rule files during active sessions.
-- **Configure AI Agents & MCP** adds the local stdio MCP server and agent instructions to selected Cursor, Antigravity, Claude Code, GitHub Copilot, and Git pre-commit and pre-push hook configurations.
+- **Smart Waiver Justification Templates**: 1-click QuickPick justification templates (`Authorized refactoring`, `Approved scope extension`, `Approved dependency update`, etc.) for seamless developer waivers.
+- **Configure AI Agents & MCP**: Adds the local stdio MCP server and agent instructions to selected Cursor, Antigravity, Claude Code, GitHub Copilot, and Git pre-commit and pre-push hook configurations.
 - **Open Vibe Coding Guide**: Opens the comprehensive best practices guide inside VS Code in markdown preview or via the $(book) icon in the Intent Contract Findings panel.
 - **Git Push & Commit Blocking**: Installing the Git hooks automatically verifies active contracts on `git commit` and `git push`, blocking pushes and commits whenever error findings exist until they are resolved or authorized waivers are recorded.
-- **Export Architecture Drift Diagram** writes **.intent/.architecture-drift.mmd** for the active architecture contract and opens a Mermaid Markdown preview. Official edges are green; unlisted code imports are dashed red and labeled as violations.
-- **Start Contract** captures the current working tree, including uncommitted and untracked files, using a temporary Git index. The actual index is left untouched.
+- **Export Architecture Drift Diagram**: Writes **.intent/.architecture-drift.mmd** for the active architecture contract and opens a Mermaid Markdown preview. Official edges are green; unlisted code imports are dashed red and labeled as violations.
+- **Start Contract**: Captures the current working tree, including uncommitted and untracked files, using a temporary Git index. The actual index is left untouched.
 - An active session cannot be replaced accidentally. Stop it before starting another contract, or use `intent-contract start <name> --force` to capture a deliberate replacement baseline.
-- **Re-check Now** compares the current tree with that snapshot. File-system changes and editor saves also trigger a check after the configured debounce interval.
-- **Revert File to Baseline** restores one changed file or removes one file that was added after the baseline.
-- **Waive Finding** records a required reason and timestamp in `.intent/waivers.json` when the contract allows exceptions.
-- **Copy Violations For Agent** copies active findings as corrective instructions. `.intent/.violations.md` is also refreshed on each check.
-- **Stop Contract** ends the active session.
+- **Re-check Now**: Compares the current tree with that snapshot. File-system changes and editor saves also trigger a check after the configured debounce interval.
+- **Revert File to Baseline**: Restores one changed file or removes one file that was added after the baseline.
+- **Waive Finding**: Records a required reason and timestamp in `.intent/waivers.json` when the contract allows exceptions.
+- **Copy Violations For Agent**: Copies active findings as corrective instructions. `.intent/.violations.md` is also refreshed on each check.
+- **Stop Contract**: Ends the active session.
 
 The Explorer view groups findings by file, provides diff/revert/waive actions, and keeps waived findings in a separate group. Diagnostics appear at a changed line when available or at the start of a file for file-level findings.
 
@@ -80,17 +86,21 @@ The Explorer view groups findings by file, provides diff/revert/waive actions, a
 
 The build produces `dist/cli.js` and `dist/mcp-server.js` alongside the VS Code extension bundle. The CLI does not require an active extension session when a Git base and contract are supplied. Run from the repository root:
 
-    node dist/cli.js check --base origin/main --contract .intent/default.yaml --format github
     node dist/cli.js start default [--force]
-    node dist/cli.js check
+    node dist/cli.js check [--base origin/main] [--contract .intent/default.yaml] [--format text|json|github]
     node dist/cli.js check --index
     node dist/cli.js check --revision <local-commit-sha>
+    node dist/cli.js report [--output <path>]
     node dist/cli.js revert src/example.ts
     node dist/cli.js hook install
     node dist/cli.js guide
     node dist/cli.js stop
 
-The CLI reads the contract from the same policy tree it checks: the selected `--base`, the active session baseline, or `HEAD`. The contract path must exist in that tree. This keeps a change from weakening its own policy during a check. `check --index` verifies the staged Git index; `check --revision <sha>` verifies a local commit tree, as used by the pre-push hook. The check command returns exit code 1 when unwaived error findings exist. Formats are text, json, and GitHub Actions annotations. The MCP server uses JSON-RPC over stdio and exposes `get_active_contract`, `verify_intent_contract`, `get_remediation_instructions`, `revert_out_of_scope_files`, `self_heal_contract`, and `start_intent_contract`.
+The CLI reads the contract from the same policy tree it checks: the selected `--base`, the active session baseline, or `HEAD`. The contract path must exist in that tree. This keeps a change from weakening its own policy during a check. `check --index` verifies the staged Git index; `check --revision <sha>` verifies a local commit tree, as used by the pre-push hook. The check command returns exit code 1 when unwaived error findings exist. Formats are text, json, and GitHub Actions annotations.
+
+When running in GitHub Actions CI workflows, setting `$GITHUB_STEP_SUMMARY` automatically causes both `intent-contract check` and `intent-contract report` to render rich Markdown compliance scorecards and violation tables directly in the GitHub Actions run summary tab.
+
+The MCP server uses JSON-RPC over stdio and exposes `get_active_contract`, `verify_intent_contract`, `get_remediation_instructions`, `revert_out_of_scope_files`, `self_heal_contract`, and `start_intent_contract`.
 
 ## Development checks
 

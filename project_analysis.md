@@ -29,10 +29,15 @@ flowchart LR
   end
 
   subgraph "UI Components"
-    TREE["Tree View"]
+    TREE["Activity Bar & Tree View"]
     DIAG["Diagnostics"]
-    SB["Status Bar"]
-    ACTIONS["Actions<br/>diff · revert · waive · copy"]
+    SB["Status Bar HUD"]
+    DASH["Mission Control Dashboard"]
+    ARCH_UI["Visual Architecture Inspector"]
+    BUILDER["Visual Contract Builder"]
+    CODELENS["Ambient Scope CodeLens"]
+    QUICKFIX["Quick-Fix CodeActions"]
+    ACTIONS["Actions & Scope Helpers"]
     BASELINE["Baseline Provider"]
   end
 
@@ -102,26 +107,32 @@ Node labels can embed `[glob/patterns/**]` to auto-map architecture nodes to fil
 
 The main entry point. Lifecycle:
 
-1. **activate()**: Registers 10 commands, tree view, content providers, file watcher, and restores any saved session.
-2. **File watcher**: Debounces FS events (create/change/delete) and editor saves with an 800ms timer → `runCheck()`.
+1. **activate()**: Registers 20 commands, dedicated Activity Bar container, tree views, diagnostics collection, CodeLens provider, QuickFix CodeAction provider, content providers, file watcher, dynamic agent hot-sync, and restores any saved session.
+2. **File watcher**: Debounces FS events (create/change/delete) and editor saves with a configurable 300ms timer (`intentContract.debounce`) → `runCheck()`.
 3. **runCheck()**: Serialized via `checkRunning`/`checkQueued` flags to avoid overlapping checks. Calls `performCheck()` which:
    - Creates a fresh working-tree snapshot
    - Diffs baseline vs. current
    - Runs all detectors
    - Reads waivers, filters active findings
-   - Updates diagnostics, tree view, status bar, `.violations.md`
-4. **startContract()**: Discovers/picks a contract, captures baseline, loads contract from baseline tree, persists session.
-5. **Metadata**: `.intent/.state.json`, `.intent/.violations.md`, `.intent/waivers.json`, and the exported drift diagram are ignored by Git metadata rules; contract files and architecture diagrams remain part of the policy tree.
+   - Updates diagnostics, tree view, status bar HUD, CodeLens, and `.violations.md`
+4. **startContract()**: Discovers/picks a contract, captures baseline, loads contract from baseline tree, persists session, and hot-syncs agent rules.
+5. **Metadata**: `.intent/.state.json`, `.intent/.violations.md`, `.intent/waivers.json`, `.intent/reports/`, and the exported drift diagram are ignored by Git metadata rules; contract files and architecture diagrams remain part of the policy tree.
 
 ### 6. UI Components — `src/ui/`
 
 | Component | File | Description |
 |-----------|------|-------------|
-| **Tree View** | [`treeView.ts`](src/ui/treeView.ts) | Explorer panel `intentContractFindings` grouping findings by file, with a separate "Waived Findings" collapsible group. Inline context menu actions for diff/revert/waive. |
+| **Activity Bar & Tree View** | [`treeView.ts`](src/ui/treeView.ts) | Dedicated Activity Bar view container `intent-contract-sidebar` grouping findings by file, with session status overview and "Waived Findings" collapsible group. |
+| **Mission Control Dashboard** | [`dashboard.ts`](src/ui/dashboard.ts) | Full interactive webview panel with real-time scorecards across 4 safety dimensions, 1-click corrective agent prompts, bulk out-of-scope reverts, session controls, and compliance report exports. |
+| **Visual Architecture Inspector** | [`architectureInspector.ts`](src/ui/architectureInspector.ts) | Visual diagram explorer rendering the baseline architecture diagram overlaid with live compliance edges (green allowed, red dashed cross-import violations) with 1-click "Jump to Line" and "Revert" actions. |
+| **Visual Contract Builder** | [`visualBuilder.ts`](src/ui/visualBuilder.ts) | Interactive form webview to configure task contracts, scan workspace directories, extract AST symbols from active files, and generate AI task prompts without writing raw YAML. |
+| **Ambient Scope CodeLens** | [`codeLens.ts`](src/ui/codeLens.ts) | Non-intrusive status indicators at line 1 of active files (`🛡️ Intent: In-Scope`, `🔒 Intent: Read-Only`, `⚠️ Intent: Out of Scope`) with 1-click quick action buttons. |
+| **Quick-Fix CodeActions** | [`quickFix.ts`](src/ui/quickFix.ts) | Native VS Code QuickFix (`Ctrl+.` / 💡) actions on active diagnostics to add files to scope, revert to baseline, add symbols to modify scope, or inspect in architecture visualizer. |
 | **Diagnostics** | [`diagnostics.ts`](src/ui/diagnostics.ts) | Maps findings to VS Code diagnostic collection with error/warning severity squiggles at the relevant line. |
-| **Status Bar** | [`statusBar.ts`](src/ui/statusBar.ts) | Left-aligned item showing `$(shield) Contract: name · N violations` with error/warning background color. Click opens tree view or starts a contract. |
+| **Status Bar HUD** | [`statusBar.ts`](src/ui/statusBar.ts) & [`extension.ts`](src/extension.ts) | Left-aligned item showing `$(shield) Contract: name · N violations`. Clicking launches an interactive command HUD for starting/ending sessions, dashboard navigation, reports, and switching contracts. |
+| **Scope & Context Helpers** | [`scopeHelpers.ts`](src/ui/scopeHelpers.ts) | Right-click editor and explorer actions (`Add Symbol to Scope`, `Add File to Scope`, `Mark File Read-Only`) with live Git baseline sync (`updateContractInBaseline`). |
 | **Baseline Provider** | [`baselineContentProvider.ts`](src/ui/baselineContentProvider.ts) | `intent-baseline://` URI scheme providing baseline file content for VS Code diff views. |
-| **Actions** | [`actions.ts`](src/ui/actions.ts) | `openDiff()`, `revertFile()` (with modal confirmation), `waiveFinding()` (requires reason), `copyFindingsForAgent()`. |
+| **Actions & Smart Waivers** | [`actions.ts`](src/ui/actions.ts) | `openDiff()`, `revertFile()` (with modal confirmation), `waiveFinding()` (with smart justification templates), `copyFindingsForAgent()`. |
 
 ### 7. State Management — `src/state/`
 
@@ -131,6 +142,7 @@ The main entry point. Lifecycle:
 | [`waivers.ts`](src/state/waivers.ts) | `.intent/waivers.json` | Array of `{id, reason, timestamp}`. Waived findings are excluded from active counts. |
 | [`violations.ts`](src/state/violations.ts) | `.intent/.violations.md` | Refreshed on every check; markdown formatted for agent consumption. |
 | [`formatViolations.ts`](src/state/formatViolations.ts) | — | Formats findings as structured remediation instructions with diff evidence and action items. |
+| [`report.ts`](src/state/report.ts) | `.intent/reports/*.md` | Generates verified Markdown AI Safety certificates with 5-dimension scorecard, modified files ledger, and cryptographic Git audit seals. |
 
 ### 8. Runtime — `src/runtime/contracts.ts`
 
@@ -143,34 +155,39 @@ Headless operations shared by CLI and MCP (no VS Code dependency):
 
 ### 9. CLI — `src/cli/index.ts`
 
-Commands: `start <name> [--force]`, `check [--base --contract --index --revision --format]`, `revert <file>`, `stop`. `--index` checks staged content; `--revision <sha>` checks a local commit tree. They cannot be combined and require an active session.
-- `--base origin/main` uses a Git ref as the policy tree (for CI without active sessions)
-- `--format github` outputs `::error file=...,line=...::message` annotations
-- Exit code 1 on unwaived error findings
+Commands: `start <name> [--force]`, `check [--base --contract --index --revision --format]`, `report [--output <path>]`, `revert <file>`, `hook install`, `guide`, `stop`.
+- `--index` checks staged content; `--revision <sha>` checks a local commit tree. They cannot be combined and require an active session.
+- `--base origin/main` uses a Git ref as the policy tree (for CI without active sessions).
+- `--format github` outputs `::error file=...,line=...::message` annotations.
+- `report [--output <path>]` exports AI safety compliance certificates.
+- Automatically appends rich Markdown compliance reports and summary banners to `$GITHUB_STEP_SUMMARY` when running in GitHub Actions CI runners.
+- Exit code 1 on unwaived error findings.
 
 ### 10. MCP Server — `src/mcp/server.ts`
 
-JSON-RPC over stdio implementing MCP protocol (version `2024-11-05`). Four tools:
+JSON-RPC over stdio implementing MCP protocol (version `2024-11-05`). Six tools:
 
 | Tool | Description |
 |------|-------------|
 | `get_active_contract` | Returns contract YAML, parsed fields, boundaries |
 | `verify_intent_contract` | Full verification with findings + remediation text |
+| `get_remediation_instructions` | Step-by-step actionable instructions for autonomous agent self-correction |
 | `revert_out_of_scope_files` | Restore scope-violating files to baseline |
+| `self_heal_contract` | Autonomous agent remediation loop that reverts out-of-scope files and re-verifies |
 | `start_intent_contract` | Start a named contract by name |
 
-### 11. Agent Configuration — `src/config/agentConfig.ts`
+### 11. Agent Configuration & Hot-Sync — `src/config/agentConfig.ts` & `src/config/agentSync.ts`
 
-One-click setup for four AI agent ecosystems plus the Git hooks:
+One-click setup and dynamic session hot-sync for four AI agent ecosystems plus the Git hooks:
 
-| Integration | MCP Config | Rules File |
-|-------------|-----------|------------|
-| **Cursor** | `.cursor/mcp.json` | `.cursor/rules/intent-contract.mdc` |
-| **Google Antigravity** | `.agents/mcp_config.json` | `.agents/rules/intent-contract.md` |
-| **Claude Code** | `.mcp.json` | `CLAUDE.md` (appended) |
-| **GitHub Copilot** | `.vscode/mcp.json` (`servers`) | `.github/copilot-instructions.md` (appended) |
-| **Git pre-commit** | — | `.git/hooks/pre-commit` checks `--index` (shell block) |
-| **Git pre-push** | — | `.git/hooks/pre-push` checks each pushed local SHA with `--revision` (shell block) |
+| Integration | MCP Config | Rules File | Hot-Sync Support |
+|-------------|-----------|------------|:----------------:|
+| **Cursor** | `.cursor/mcp.json` | `.cursor/rules/intent-contract.mdc` | ✅ Auto-injected on start, cleaned on stop |
+| **Google Antigravity** | `.agents/mcp_config.json` | `.agents/rules/intent-contract.md` | ✅ Auto-injected on start, cleaned on stop |
+| **Claude Code** | `.mcp.json` | `CLAUDE.md` (appended) | ✅ Auto-injected on start, cleaned on stop |
+| **GitHub Copilot** | `.vscode/mcp.json` (`servers`) | `.github/copilot-instructions.md` (appended) | ✅ Auto-injected on start, cleaned on stop |
+| **Git pre-commit** | — | `.git/hooks/pre-commit` checks `--index` (shell block) | Permanent hook |
+| **Git pre-push** | — | `.git/hooks/pre-push` checks each pushed local SHA with `--revision` (shell block) | Permanent hook |
 
 All merge non-destructively using `<!-- BEGIN/END INTENT CONTRACT GENERATED RULE -->` markers.
 

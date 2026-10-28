@@ -55,8 +55,11 @@ flowchart TD
         ArchInspector["Visual Architecture Drift Inspector<br/>(Interactive graph overlay, Jump-to-line, Revert)"]
         VisualBuilder["Visual Contract Builder<br/>(Interactive form wizard, Workspace scan)"]
         CodeLens["Ambient In-Editor CodeLens<br/>(In-Scope, Read-Only, Out-of-Scope actions)"]
+        QuickFix["In-Editor Quick-Fix Actions<br/>(Ctrl+. add to scope, revert, add symbol)"]
+        StatusHUD["Status Bar HUD Launcher<br/>(1-click command menu, session switcher)"]
         ScopeHelpers["In-Editor Scope Helpers<br/>(Add Symbol, Add File, Lock Read-Only)"]
         AgentSync["Dynamic Agent Prompt Hot-Sync<br/>(Cursor, Claude, Copilot, Antigravity)"]
+        ReportGen["Compliance Report Generator<br/>(Cryptographic audit seals in .intent/reports/)"]
     end
 
     subgraph Runtime["Shared Core Runtime (src/runtime/)"]
@@ -389,11 +392,17 @@ intent-contract start <contract-name> [--force]
 # Check active contract or verify against a Git ref without a session
 intent-contract check [--base <ref>] [--contract <path>] [--index | --revision <sha>] [--format text|json|github]
 
+# Generate AI safety compliance certificate (automatically attaches to GITHUB_STEP_SUMMARY in CI)
+intent-contract report [--output <path>]
+
 # Revert a file back to its captured baseline
 intent-contract revert <file-path>
 
 # Install Git pre-commit and pre-push hooks
 intent-contract hook install
+
+# Display quick guide summary
+intent-contract guide
 
 # Stop the active contract session
 intent-contract stop
@@ -428,7 +437,15 @@ jobs:
             --base origin/${{ github.base_ref }} \
             --contract .intent/default.yaml \
             --format github
+
+      - name: Generate Session Compliance Report
+        if: always()
+        run: |
+          intent-contract report
 ```
+
+> [!NOTE]
+> When running in GitHub Actions CI, setting `GITHUB_STEP_SUMMARY` causes `intent-contract check` and `intent-contract report` to append rich Markdown compliance summaries and violation tables directly to the Actions run summary page.
 
 ---
 
