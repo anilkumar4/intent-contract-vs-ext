@@ -2,7 +2,7 @@
   "name": "intent-contract",
   "displayName": "Intent Contract",
   "description": "Detects changes that violate a local AI task contract.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "anilkumar4",
   "repository": {
     "type": "git",
