@@ -70,5 +70,61 @@ describe("Agent prompt hot-sync", () => {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
+
+  it("does not synthesize .github/copilot-instructions.md just because .github/ exists", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "intent-agent-github-test-"));
+    try {
+      const githubWorkflowDir = path.join(root, ".github/workflows");
+      await fs.mkdir(githubWorkflowDir, { recursive: true });
+      await fs.writeFile(path.join(githubWorkflowDir, "ci.yml"), "name: CI\n");
+
+      const updated = await syncActiveContractToAgents(root, sampleContract);
+      expect(updated).not.toContain("Copilot Instructions");
+
+      // Verify .github/copilot-instructions.md was NOT created
+      const copilotFile = path.join(root, ".github/copilot-instructions.md");
+      let exists = false;
+      try {
+        await fs.access(copilotFile);
+        exists = true;
+      } catch {
+        exists = false;
+      }
+      expect(exists).toBe(false);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("unlinks files on clear if they contain no other user content, leaving zero untracked files", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "intent-agent-unlink-test-"));
+    try {
+      const agentsDir = path.join(root, ".agents/rules");
+      await fs.mkdir(agentsDir, { recursive: true });
+
+      // Start contract generates .agents/rules/intent-contract.md with no existing user content
+      const updated = await syncActiveContractToAgents(root, sampleContract);
+      expect(updated).toContain("Antigravity Rules");
+
+      const agentRulePath = path.join(agentsDir, "intent-contract.md");
+      await expect(fs.readFile(agentRulePath, "utf8")).resolves.toContain("feature-checkout");
+
+      // Stop contract cleans up
+      const cleared = await clearActiveContractFromAgents(root);
+      expect(cleared).toContain("Antigravity Rules");
+
+      // Verify file was unlinked and does NOT linger as untracked file
+      let exists = false;
+      try {
+        await fs.access(agentRulePath);
+        exists = true;
+      } catch {
+        exists = false;
+      }
+      expect(exists).toBe(false);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
 });
 

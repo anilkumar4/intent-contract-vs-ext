@@ -43,6 +43,11 @@ export async function syncActiveContractToAgents(root: string, contract: Contrac
     }
 
     if (!fileExists) {
+      // Do not automatically create .github/copilot-instructions.md or CLAUDE.md if they do not exist.
+      // .github is a standard repo directory for workflows/CI; its presence does not mean Copilot instructions should be synthesized.
+      if (target.relativePath === ".github/copilot-instructions.md" || target.relativePath === "CLAUDE.md") {
+        continue;
+      }
       if (!target.relativePath.includes("/") || !parentExists) {
         continue;
       }
@@ -72,9 +77,16 @@ export async function clearActiveContractFromAgents(root: string): Promise<strin
     try {
       const existingContent = await fs.readFile(fullPath, "utf8");
       if (existingContent.includes(TASK_START_TAG)) {
-        const newContent = injectTaskSection(existingContent, dormantContent);
-        await fs.writeFile(fullPath, newContent, "utf8");
-        updatedTargets.push(target.name);
+        const userContent = extractUserContent(existingContent);
+        if (!userContent) {
+          // If the file only contained our Intent Contract markers, remove it so no dormant untracked file remains
+          await fs.unlink(fullPath);
+          updatedTargets.push(target.name);
+        } else {
+          const newContent = injectTaskSection(existingContent, dormantContent);
+          await fs.writeFile(fullPath, newContent, "utf8");
+          updatedTargets.push(target.name);
+        }
       }
     } catch {
       // Ignore if file doesn't exist
@@ -82,6 +94,19 @@ export async function clearActiveContractFromAgents(root: string): Promise<strin
   }
 
   return updatedTargets;
+}
+
+export function extractUserContent(content: string): string {
+  const startIndex = content.indexOf(TASK_START_TAG);
+  const endIndex = content.indexOf(TASK_END_TAG);
+
+  if (startIndex === -1 || endIndex === -1 || endIndex < startIndex) {
+    return content.trim();
+  }
+
+  const before = content.slice(0, startIndex);
+  const after = content.slice(endIndex + TASK_END_TAG.length);
+  return `${before.trim()}\n${after.trim()}`.trim();
 }
 
 function renderTaskPromptSection(contract: Contract): string {

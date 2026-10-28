@@ -447,6 +447,7 @@ async function startContract(): Promise<void> {
   root = repoRoot;
   contract = selectedContract;
   await ensureIntentMetadataIgnored(repoRoot);
+  await syncActiveContractToAgents(repoRoot, selectedContract);
   const snapshot = await captureBaseline(repoRoot, selectedContract.scope.read_only);
   session = {
     ...snapshot,
@@ -455,7 +456,6 @@ async function startContract(): Promise<void> {
   };
   contract = await loadContractFromBaseline(repoRoot, session);
   await writeSession(repoRoot, session);
-  void syncActiveContractToAgents(repoRoot, selectedContract);
   void vscode.window.showInformationMessage(`Started contract "${selectedContract.name}" from the current working tree.`);
   await runCheck();
   codeLensProvider?.refresh();
@@ -486,6 +486,7 @@ async function startContractByName(name: string): Promise<void> {
   root = repoRoot;
   contract = selectedContract;
   await ensureIntentMetadataIgnored(repoRoot);
+  await syncActiveContractToAgents(repoRoot, selectedContract);
   const snapshot = await captureBaseline(repoRoot, selectedContract.scope.read_only);
   session = {
     ...snapshot,
@@ -494,7 +495,6 @@ async function startContractByName(name: string): Promise<void> {
   };
   contract = await loadContractFromBaseline(repoRoot, session);
   await writeSession(repoRoot, session);
-  void syncActiveContractToAgents(repoRoot, selectedContract);
   void vscode.window.showInformationMessage(`Started contract "${selectedContract.name}" from the current working tree.`);
   await runCheck();
   codeLensProvider?.refresh();

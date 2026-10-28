@@ -39,7 +39,7 @@ export async function ensureIntentMetadataIgnored(root: string): Promise<void> {
     if (!isMissing(error)) throw error;
   }
   const lines = new Set(contents.split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
-  const required = [".state.json", ".violations.md", "waivers.json", ".architecture-drift.mmd"];
+  const required = [".state.json", ".violations.md", "waivers.json", ".architecture-drift.mmd", "reports/"];
   const missing = required.filter((line) => !lines.has(line));
   if (missing.length > 0) {
     const separator = contents.length > 0 && !contents.endsWith("\n") ? "\n" : "";

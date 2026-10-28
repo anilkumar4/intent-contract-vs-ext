@@ -381,7 +381,7 @@ export class MissionControlDashboardPanel {
       <div class="card-value" style="color: ${testFindings.length === 0 ? "var(--success)" : "var(--danger)"};">
         ${testFindings.length === 0 ? "🛡️ Solid" : `⚠️ ${testFindings.length} Weakened`}
       </div>
-      <div class="card-hint">${testFindings.length === 0 ? "No assertion losses or downgrades" : "Assertions deleted or skipped"}</div>
+      <div class="card-hint">${escapeHtml(formatTestFidelityHint(testFindings))}</div>
     </div>
 
     <div class="card">
@@ -440,6 +440,37 @@ export class MissionControlDashboardPanel {
 </body>
 </html>`;
   }
+}
+
+export function formatTestFidelityHint(findings: Finding[]): string {
+  if (findings.length === 0) {
+    return "No assertion losses or downgrades";
+  }
+  const rules = new Set(findings.map((f) => f.rule));
+  const categories: string[] = [];
+
+  const hasWeakenedMatchers = rules.has("matcher_downgrade") || rules.has("assertion_negation_flip");
+  const hasDeletedAssertions = rules.has("net_assertion_loss");
+  const hasSkippedTests = rules.has("test_skipped") || rules.has("disabled_test") || rules.has("test_runner_exclusion");
+  const hasDeletedTests = rules.has("net_test_block_loss") || rules.has("deleted_test_file");
+  const hasWidenedTolerances = rules.has("numeric_tolerance_widened");
+  const hasTrivialOrEmpty = rules.has("trivial_assertion") || rules.has("empty_test_block");
+  const hasModifiedSnapshots = rules.has("snapshot_deleted") || rules.has("snapshot_modified") || rules.has("inline_snapshot_changed");
+
+  if (hasWeakenedMatchers) categories.push("weakened matchers");
+  if (hasDeletedAssertions) categories.push("deleted assertions");
+  if (hasSkippedTests) categories.push("skipped tests");
+  if (hasDeletedTests) categories.push("deleted test blocks");
+  if (hasWidenedTolerances) categories.push("widened tolerances");
+  if (hasTrivialOrEmpty) categories.push("trivial/empty tests");
+  if (hasModifiedSnapshots) categories.push("modified snapshots");
+
+  if (categories.length > 0) {
+    const primary = categories.slice(0, 2).join(", ");
+    return `Detected ${primary}${categories.length > 2 ? ", etc." : ""}`;
+  }
+
+  return "Weakened assertions or skipped tests";
 }
 
 function escapeHtml(text: string): string {

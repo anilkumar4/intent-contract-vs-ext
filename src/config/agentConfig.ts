@@ -8,6 +8,9 @@ export type AgentIntegration = "cursor" | "antigravity" | "claude" | "copilot" |
 const START_MARKER = "<!-- BEGIN INTENT CONTRACT GENERATED RULE -->";
 const END_MARKER = "<!-- END INTENT CONTRACT GENERATED RULE -->";
 
+const HOOK_START_MARKER = "# --- BEGIN INTENT CONTRACT GENERATED HOOK ---";
+const HOOK_END_MARKER = "# --- END INTENT CONTRACT GENERATED HOOK ---";
+
 export async function configureAgentIntegrations(
   root: string,
   extensionPath: string,
@@ -108,7 +111,7 @@ export async function installPreCommitHook(root: string, cliPath: string): Promi
   const existing = await readIfPresent(hookPath) ?? "";
   const nodeExec = process.execPath ? shellQuote(process.execPath) : "node";
   const block = [
-    START_MARKER,
+    HOOK_START_MARKER,
     "if [ -f .intent/.state.json ]; then",
     "  NODE_BIN=\"node\"",
     "  if ! command -v \"$NODE_BIN\" >/dev/null 2>&1; then",
@@ -125,7 +128,7 @@ export async function installPreCommitHook(root: string, cliPath: string): Promi
     "    exit \"$intent_contract_status\"",
     "  fi",
     "fi",
-    END_MARKER
+    HOOK_END_MARKER
   ].join("\n");
   const updated = upsertHookBlock(existing, block);
   await fs.mkdir(path.dirname(hookPath), { recursive: true });
@@ -143,7 +146,7 @@ export async function installPrePushHook(root: string, cliPath: string): Promise
   const existing = await readIfPresent(hookPath) ?? "";
   const nodeExec = process.execPath ? shellQuote(process.execPath) : "node";
   const block = [
-    START_MARKER,
+    HOOK_START_MARKER,
     "if [ -f .intent/.state.json ]; then",
     "  NODE_BIN=\"node\"",
     "  if ! command -v \"$NODE_BIN\" >/dev/null 2>&1; then",
@@ -167,7 +170,7 @@ export async function installPrePushHook(root: string, cliPath: string): Promise
     "    fi",
     "  done",
     "fi",
-    END_MARKER
+    HOOK_END_MARKER
   ].join("\n");
   const updated = upsertHookBlock(existing, block);
   await fs.mkdir(path.dirname(hookPath), { recursive: true });
@@ -248,11 +251,22 @@ export function ensureStableMcpLauncher(unversionedPath: string, extensionPath: 
 }
 
 function upsertHookBlock(source: string, block: string): string {
-  const start = source.indexOf(START_MARKER);
-  const end = source.indexOf(END_MARKER, start + START_MARKER.length);
+  let start = source.indexOf(HOOK_START_MARKER);
+  let end = -1;
+  let markerLen = HOOK_END_MARKER.length;
+  if (start >= 0) {
+    end = source.indexOf(HOOK_END_MARKER, start + HOOK_START_MARKER.length);
+  } else {
+    start = source.indexOf(START_MARKER);
+    if (start >= 0) {
+      end = source.indexOf(END_MARKER, start + START_MARKER.length);
+      markerLen = END_MARKER.length;
+    }
+  }
+
   let result: string;
   if (start >= 0 && end >= start) {
-    const after = end + END_MARKER.length;
+    const after = end + markerLen;
     result = source.slice(0, start) + block + source.slice(after);
   } else {
     const lines = source.replace(/\r\n/g, "\n").split("\n");

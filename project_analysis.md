@@ -123,7 +123,7 @@ The main entry point. Lifecycle:
 | Component | File | Description |
 |-----------|------|-------------|
 | **Activity Bar & Tree View** | [`treeView.ts`](src/ui/treeView.ts) | Dedicated Activity Bar view container `intent-contract-sidebar` grouping findings by file, with session status overview and "Waived Findings" collapsible group. |
-| **Mission Control Dashboard** | [`dashboard.ts`](src/ui/dashboard.ts) | Full interactive webview panel with real-time scorecards across 4 safety dimensions, 1-click corrective agent prompts, bulk out-of-scope reverts, session controls, and compliance report exports. |
+| **Mission Control Dashboard** | [`dashboard.ts`](src/ui/dashboard.ts) | Full interactive webview panel with real-time scorecards across 4 safety dimensions (including dynamic test fidelity hints detailing matcher downgrades and assertion losses), 1-click corrective agent prompts, bulk out-of-scope reverts, session controls, and compliance report exports. |
 | **Visual Architecture Inspector** | [`architectureInspector.ts`](src/ui/architectureInspector.ts) | Visual diagram explorer rendering the baseline architecture diagram overlaid with live compliance edges (green allowed, red dashed cross-import violations) with 1-click "Jump to Line" and "Revert" actions. |
 | **Visual Contract Builder** | [`visualBuilder.ts`](src/ui/visualBuilder.ts) | Interactive form webview to configure task contracts, scan workspace directories, extract AST symbols from active files, and generate AI task prompts without writing raw YAML. |
 | **Ambient Scope CodeLens** | [`codeLens.ts`](src/ui/codeLens.ts) | Non-intrusive status indicators at line 1 of active files (`🛡️ Intent: In-Scope`, `🔒 Intent: Read-Only`, `⚠️ Intent: Out of Scope`) with 1-click quick action buttons. |
@@ -132,7 +132,7 @@ The main entry point. Lifecycle:
 | **Status Bar HUD** | [`statusBar.ts`](src/ui/statusBar.ts) & [`extension.ts`](src/extension.ts) | Left-aligned item showing `$(shield) Contract: name · N violations`. Clicking launches an interactive command HUD for starting/ending sessions, dashboard navigation, reports, and switching contracts. |
 | **Scope & Context Helpers** | [`scopeHelpers.ts`](src/ui/scopeHelpers.ts) | Right-click editor and explorer actions (`Add Symbol to Scope`, `Add File to Scope`, `Mark File Read-Only`) with live Git baseline sync (`updateContractInBaseline`). |
 | **Baseline Provider** | [`baselineContentProvider.ts`](src/ui/baselineContentProvider.ts) | `intent-baseline://` URI scheme providing baseline file content for VS Code diff views. |
-| **Actions & Smart Waivers** | [`actions.ts`](src/ui/actions.ts) | `openDiff()`, `revertFile()` (with modal confirmation), `waiveFinding()` (with smart templates & TTL duration picker), `copyFindingsForAgent()`. |
+| **Actions & Smart Waivers** | [`actions.ts`](src/ui/actions.ts) | `openDiff()`, `revertFile()` (with modal confirmation), `waiveFinding()` (with detector-specific justification templates, pre-filled confirmation input box, and TTL duration picker), `copyFindingsForAgent()`. |
 
 ### 7. State Management — `src/state/`
 
@@ -185,11 +185,11 @@ One-click setup and dynamic session hot-sync for four AI agent ecosystems plus t
 | **Cursor** | `.cursor/mcp.json` | `.cursor/rules/intent-contract.mdc` | ✅ Auto-injected on start, cleaned on stop |
 | **Google Antigravity** | `.agents/mcp_config.json` | `.agents/rules/intent-contract.md` | ✅ Auto-injected on start, cleaned on stop |
 | **Claude Code** | `.mcp.json` | `CLAUDE.md` (appended) | ✅ Auto-injected on start, cleaned on stop |
-| **GitHub Copilot** | `.vscode/mcp.json` (`servers`) | `.github/copilot-instructions.md` (appended) | ✅ Auto-injected on start, cleaned on stop |
+| **GitHub Copilot** | `.vscode/mcp.json` (`servers`) | `.github/copilot-instructions.md` (appended if present) | ✅ Injected before baseline, unlinked if empty on stop |
 | **Git pre-commit** | — | `.git/hooks/pre-commit` checks `--index` (shell block) | Permanent hook |
 | **Git pre-push** | — | `.git/hooks/pre-push` checks each pushed local SHA with `--revision` (shell block) | Permanent hook |
 
-All merge non-destructively using `<!-- BEGIN/END INTENT CONTRACT GENERATED RULE -->` markers.
+All merge non-destructively using `<!-- BEGIN/END INTENT CONTRACT GENERATED RULE -->` and `<!-- INTENT_CONTRACT_ACTIVE_TASK_START/END -->` markers. On session stop, files generated solely for Intent Contract that contain no other user instructions are unlinked to avoid lingering untracked files. Hot-sync runs *before* baseline capture, preventing self-inflicted scope warnings.
 
 ---
 

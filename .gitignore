@@ -10,3 +10,4 @@ dist-test/
 .intent/.state.json
 .intent/.violations.md
 .intent/waivers.json
+.intent/reports/

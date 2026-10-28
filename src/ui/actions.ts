@@ -1,3 +1,4 @@
+import path from "node:path";
 import * as vscode from "vscode";
 import { revertFileToBaseline } from "../git/revert";
 import type { FileChange, Finding } from "../detectors/types";
@@ -79,30 +80,36 @@ export async function waiveFinding(finding: Finding | undefined, context: Action
     void vscode.window.showInformationMessage("This finding is already waived.");
     return;
   }
-  const templates = [
-    `Authorized refactoring of ${selected.file}`,
-    `Approved scope extension for ${selected.file}`,
-    `Approved dependency update in ${selected.file}`,
-    `Architectural boundary exception for legacy migration`,
-    "Enter a custom reason..."
+  const suggestions = getContextualWaiverTemplates(selected);
+  const items: Array<vscode.QuickPickItem & { template?: string; isCustom?: boolean }> = [
+    ...suggestions.map((s) => ({
+      label: s.label,
+      description: s.description,
+      detail: s.template,
+      template: s.template
+    })),
+    {
+      label: "$(edit) Enter a custom reason...",
+      description: "Type an explicit custom explanation",
+      isCustom: true
+    }
   ];
 
-  const pick = await vscode.window.showQuickPick(templates, {
-    placeHolder: `Choose a justification template or enter custom reason (${selected.file})`
+  const pick = await vscode.window.showQuickPick(items, {
+    placeHolder: `Select justification for [${selected.detector}] in ${path.basename(selected.file)}`
   });
   if (!pick) return;
 
-  let reason = pick;
-  if (pick === "Enter a custom reason...") {
-    const input = await vscode.window.showInputBox({
-      prompt: `Why should this finding be waived? (${selected.file})`,
-      placeHolder: "Record the reason for this exception",
-      ignoreFocusOut: true,
-      validateInput: (value) => value.trim().length === 0 ? "A reason is required." : undefined
-    });
-    if (!input?.trim()) return;
-    reason = input.trim();
-  }
+  const initialReason = pick.template ?? "";
+  const input = await vscode.window.showInputBox({
+    prompt: `Confirm or refine justification for ${selected.file}:`,
+    value: initialReason,
+    placeHolder: "Provide waiver reason (e.g., ticket ID, approval details)",
+    ignoreFocusOut: true,
+    validateInput: (value) => value.trim().length === 0 ? "A reason is required." : undefined
+  });
+  if (!input?.trim()) return;
+  const reason = input.trim();
 
   const ttlOptions = [
     { label: "Permanent", description: "Never expires", ms: 0 },
@@ -151,4 +158,156 @@ async function chooseFinding(findings: Finding[], waivers: Map<string, Waiver>):
     return undefined;
   }
   return (await vscode.window.showQuickPick(options, { placeHolder: "Choose a finding to waive" }))?.finding;
+}
+
+export interface WaiverSuggestion {
+  label: string;
+  description: string;
+  template: string;
+}
+
+export function getContextualWaiverTemplates(finding: Finding): WaiverSuggestion[] {
+  const normFile = finding.file.replace(/\\/g, "/").toLowerCase();
+
+  switch (finding.detector) {
+    case "high_risk_files": {
+      if (normFile.includes(".github/") || normFile.includes(".gitlab") || normFile.includes("jenkins") || normFile.includes("workflow")) {
+        return [
+          {
+            label: "Approved CI/CD workflow update",
+            description: "Pipeline or automation workflow change",
+            template: `Approved CI/CD workflow update for ${finding.file}`
+          },
+          {
+            label: "Emergency pipeline/build fix",
+            description: "Temporary build fix pending full review",
+            template: `Emergency pipeline fix in ${finding.file}`
+          },
+          {
+            label: "Authorized deployment/infrastructure update",
+            description: "Approved DevOps or infrastructure change",
+            template: `Authorized infrastructure update in ${finding.file}`
+          }
+        ];
+      }
+      if (normFile.includes(".env") || normFile.includes("secret") || normFile.includes("cert") || normFile.includes("auth")) {
+        return [
+          {
+            label: "Authorized security/credential configuration",
+            description: "Reviewed and approved sensitive security change",
+            template: `Authorized security configuration update in ${finding.file}`
+          },
+          {
+            label: "Environment configuration update",
+            description: "Approved runtime/environment variable update",
+            template: `Approved environment update in ${finding.file}`
+          }
+        ];
+      }
+      return [
+        {
+          label: "Authorized sensitive path modification",
+          description: "Explicitly reviewed critical file change",
+          template: `Authorized sensitive file modification in ${finding.file}`
+        },
+        {
+          label: "Approved core configuration change",
+          description: "Configuration change reviewed with lead/team",
+          template: `Approved core configuration change in ${finding.file}`
+        }
+      ];
+    }
+    case "dependencies": {
+      return [
+        {
+          label: "Approved package addition/upgrade",
+          description: "Approved dependency addition or version bump",
+          template: `Approved dependency addition/update in ${finding.file}`
+        },
+        {
+          label: "Security vulnerability fix",
+          description: "Required CVE patch or security advisory upgrade",
+          template: `Security patch requiring dependency update in ${finding.file}`
+        },
+        {
+          label: "Development/testing tooling dependency",
+          description: "Non-production dependency for tests or build tools",
+          template: `Approved dev/tooling dependency addition in ${finding.file}`
+        }
+      ];
+    }
+    case "test_weakening":
+    case "tautological_tests": {
+      return [
+        {
+          label: "Intentional test suite refactoring",
+          description: "Assertion rewritten or test mock overhauled",
+          template: `Intentional test suite refactoring in ${finding.file}`
+        },
+        {
+          label: "Assertion update due to requirement change",
+          description: "Specification changed expected behavior",
+          template: `Approved test update reflecting specification change in ${finding.file}`
+        },
+        {
+          label: "Temporary waiver during feature development",
+          description: "Waiver to unblock progress while new tests are authored",
+          template: `Temporary test waiver during feature development in ${finding.file}`
+        }
+      ];
+    }
+    case "architecture_drift": {
+      return [
+        {
+          label: "Architectural boundary exception for legacy migration",
+          description: "Temporary cross-module dependency during transition",
+          template: `Architectural boundary exception for legacy migration (${finding.file})`
+        },
+        {
+          label: "Approved cross-module dependency",
+          description: "Verified and accepted coupling between modules",
+          template: `Approved cross-module dependency in ${finding.file}`
+        },
+        {
+          label: "In-progress architectural decoupling",
+          description: "Step in multi-stage refactoring roadmap",
+          template: `In-progress refactoring across module boundary (${finding.file})`
+        }
+      ];
+    }
+    case "symbol_scope": {
+      return [
+        {
+          label: "Authorized symbol modification",
+          description: "Approved change to symbol outside current contract scope",
+          template: `Authorized symbol modification outside contracted symbols in ${finding.file}`
+        },
+        {
+          label: "Internal helper / supporting function update",
+          description: "Supporting private function modified to serve in-scope task",
+          template: `Authorized internal helper update in ${finding.file}`
+        }
+      ];
+    }
+    case "scope":
+    default: {
+      return [
+        {
+          label: "Approved scope extension",
+          description: "Necessary change outside initial contract files",
+          template: `Approved scope extension for ${finding.file}`
+        },
+        {
+          label: "Bugfix in supporting file",
+          description: "Fixed unexpected issue discovered during primary task",
+          template: `Authorized supporting bugfix in ${finding.file}`
+        },
+        {
+          label: "Shared utility/type update",
+          description: "Supporting type definition or utility change",
+          template: `Approved supporting utility change in ${finding.file}`
+        }
+      ];
+    }
+  }
 }

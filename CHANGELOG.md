@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.1] - 2026-10-28
+
+### Fixed & Improved
+- **Agent Prompt Hot-Sync Baseline Ordering & Clean Cleanup**:
+  - `syncActiveContractToAgents` is now awaited *before* `captureBaseline` during contract startup, ensuring injected prompt blocks are incorporated into the initial baseline and eliminating self-inflicted scope warnings or high-risk findings.
+  - Guarded `.github/copilot-instructions.md` so it is only updated if the file already exists, avoiding false creation merely because a repository contains `.github/workflows/`.
+  - Added clean file unlinking in `clearActiveContractFromAgents`: files created solely for Intent Contract with no other user content are deleted when stopping a session, leaving zero dormant untracked files behind.
+- **Dynamic Test Fidelity Dashboard Hints**:
+  - Replaced narrow static hint with dynamic `formatTestFidelityHint` in `MissionControlDashboardPanel`, accurately reflecting matcher downgrades (`toBe` → `toBeTruthy`), deleted assertions, skipped tests, widened tolerances, and modified snapshots.
+- **Context-Aware Waiver Justifications**:
+  - Implemented `getContextualWaiverTemplates` in `src/ui/actions.ts` providing tailored justification suggestions per detector (`high_risk_files`, `dependencies`, `test_weakening`, `architecture_drift`, `symbol_scope`, `scope`).
+  - CI/CD workflow edits now suggest pipeline and emergency build justifications rather than generic refactoring.
+  - Added pre-filled confirmation input box allowing instant Enter confirmation or custom refinement with ticket IDs.
+
+---
+
 ## [0.4.0] - 2026-10-28
 
 ### Added
