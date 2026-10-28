@@ -43,48 +43,48 @@ The following diagram illustrates how the VS Code extension, the CLI, and the MC
 
 ```mermaid
 flowchart TD
-  subgraph Clients["Clients & Interfaces"]
-    IDE["VS Code / Cursor Extension<br/>(Diagnostics, Findings Tree, Baseline Diff, Status Bar)"]
-    CLI["Headless CLI (`intent-contract`)<br/>(Start, Check, Revert, Hook, CI --base)"]
-    MCP["Model Context Protocol (MCP) Server<br/>(Cursor, Claude Code, Antigravity, Copilot)"]
-    HOOKS["Git Hooks (`pre-commit`, `pre-push`)<br/>(Blocks commit/push on active contract errors)"]
-  end
+    subgraph Clients["Clients & Interfaces"]
+        IDE["VS Code / Cursor Extension<br/>(Diagnostics, Findings Tree, Baseline Diff, Status Bar)"]
+        CLI["Headless CLI (`intent-contract`)<br/>(Start, Check, Revert, Hook, CI --base)"]
+        MCP["Model Context Protocol (MCP) Server<br/>(Cursor, Claude Code, Antigravity, Copilot)"]
+        HOOKS["Git Hooks (`pre-commit`, `pre-push`)<br/>(Blocks commit/push on active contract errors)"]
+    end
 
-  subgraph Runtime["Shared Core Runtime (src/runtime/)"]
-    Lifecycle["Session Lifecycle & State<br/>(.intent/.state.json, originalBaselineTreeHash)"]
-    ContractLoader["Contract Schema & Validator<br/>(Zod Schema, Strict YAML Parsing)"]
-    VerificationEngine["Verification Engine<br/>(verifyIntentContract)"]
-    Waivers["Waiver & Tamper Resistance<br/>(.intent/waivers.json)"]
-    Violations["Violations Formatter<br/>(.intent/.violations.md)"]
-  end
+    subgraph Runtime["Shared Core Runtime (src/runtime/)"]
+        Lifecycle["Session Lifecycle & State<br/>(.intent/.state.json, originalBaselineTreeHash)"]
+        ContractLoader["Contract Schema & Validator<br/>(Zod Schema, Strict YAML Parsing)"]
+        VerificationEngine["Verification Engine<br/>(verifyIntentContract)"]
+        Waivers["Waiver & Tamper Resistance<br/>(.intent/waivers.json)"]
+        Violations["Violations Formatter<br/>(.intent/.violations.md)"]
+    end
 
-  subgraph GitEngine["Git Snapshot & Diff Engine (src/git/)"]
-    Snapshot["Snapshot Engine<br/>(Temporary Index via GIT_INDEX_FILE, git add -f)"]
-    DiffEngine["Diff Engine<br/>(git diff-tree, parallel git cat-file blob)"]
-    RevertEngine["Revert Engine<br/>(Byte-exact baseline restore)"]
-  end
+    subgraph GitEngine["Git Snapshot & Diff Engine (src/git/)"]
+        Snapshot["Snapshot Engine<br/>(Temporary Index via GIT_INDEX_FILE, git add -f)"]
+        DiffEngine["Diff Engine<br/>(git diff-tree, parallel git cat-file blob)"]
+        RevertEngine["Revert Engine<br/>(Byte-exact baseline restore)"]
+    end
 
-  subgraph Detectors["Detector Pipeline (src/detectors/)"]
-    D_Scope["Scope Detector<br/>(modify, read_only, !exclusions, implicit .intent)"]
-    D_Symbol["Symbol Scope Detector<br/>(TS Compiler AST, Python AST, Qualified Symbols)"]
-    D_Dep["Dependencies & Supply Chain<br/>(npm, pip, go, cargo, maven, gradle, dotnet, ruby)"]
-    D_Risk["High-Risk Files<br/>(CI, IaC, K8s, Agent Rules, .env, Configurable)"]
-    D_Test["Test Weakening & Tautology<br/>(Assertion Loss, pytest.approx, Skip, @Disabled)"]
-    D_Arch["Architecture Drift<br/>(Mermaid, C4, Draw.io, TS/Py/Go/JVM/C# Imports)"]
-  end
+    subgraph Detectors["Detector Pipeline (src/detectors/)"]
+        D_Scope["Scope Detector<br/>(modify, read_only, !exclusions, implicit .intent)"]
+        D_Symbol["Symbol Scope Detector<br/>(TS Compiler AST, Python AST, Qualified Symbols)"]
+        D_Dep["Dependencies & Supply Chain<br/>(npm, pip, go, cargo, maven, gradle, dotnet, ruby)"]
+        D_Risk["High-Risk Files<br/>(CI, IaC, K8s, Agent Rules, .env, Configurable)"]
+        D_Test["Test Weakening & Tautology<br/>(Assertion Loss, pytest.approx, Skip, @Disabled)"]
+        D_Arch["Architecture Drift<br/>(Mermaid, C4, Draw.io, TS/Py/Go/JVM/C# Imports)"]
+    end
 
-  IDE --> Lifecycle
-  IDE --> VerificationEngine
-  CLI --> VerificationEngine
-  HOOKS --> CLI
-  MCP --> VerificationEngine
-  MCP --> RevertEngine
+    IDE --> Lifecycle
+    IDE --> VerificationEngine
+    CLI --> VerificationEngine
+    HOOKS --> CLI
+    MCP --> VerificationEngine
+    MCP --> RevertEngine
 
-  VerificationEngine --> ContractLoader
-  VerificationEngine --> GitEngine
-  VerificationEngine --> Detectors
-  VerificationEngine --> Waivers
-  VerificationEngine --> Violations
+    VerificationEngine --> ContractLoader
+    VerificationEngine --> GitEngine
+    VerificationEngine --> Detectors
+    VerificationEngine --> Waivers
+    VerificationEngine --> Violations
 ```
 
 ---
@@ -138,52 +138,52 @@ Intent Contract can install Git hooks (`intent-contract hook install` or via VS 
 
 ```mermaid
 sequenceDiagram
-  autonumber
-  actor User as Developer / Agent
-  participant Ext as Intent Contract (IDE / CLI / MCP)
-  participant Git as Git Engine
-  participant Runtime as Shared Runtime
-  participant Detectors as Detector Pipeline
+    autonumber
+    actor User as Developer / Agent
+    participant Ext as Intent Contract (IDE / CLI / MCP)
+    participant Git as Git Engine
+    participant Runtime as Shared Runtime
+    participant Detectors as Detector Pipeline
 
-  User->>Ext: Start Contract ("feature-billing")
-  Ext->>Runtime: startIntentContract(root, "feature-billing")
-  Runtime->>Git: Capture working tree baseline (temp index)
-  Git-->>Runtime: Baseline tree hash (e.g. 7f2a1b)
-  Runtime->>Git: Store ref refs/intent/baselines/...
-  Runtime->>Runtime: Write .intent/.state.json
-  Runtime-->>User: Contract active (Baseline locked)
+    User->>Ext: Start Contract ("feature-billing")
+    Ext->>Runtime: startIntentContract(root, "feature-billing")
+    Runtime->>Git: Capture working tree baseline (temp index)
+    Git-->>Runtime: Baseline tree hash (e.g. 7f2a1b)
+    Runtime->>Git: Store ref refs/intent/baselines/...
+    Runtime->>Runtime: Write .intent/.state.json
+    Runtime-->>User: Contract active (Baseline locked)
 
-  Note over User,Ext: Agent or Developer modifies source files
+    Note over User,Ext: Agent or Developer modifies source files
 
-  User->>Ext: File saved / CLI check / git push
-  Ext->>Git: Snapshot current working tree (temp index)
-  Git-->>Ext: Current tree hash (e.g. 9c4d3e)
-  Ext->>Git: diffTrees(baseline, current)
-  Git-->>Ext: ParsedDiff (added, deleted, modified, hunks)
-  Ext->>Detectors: detectFindingsForWorkspace(...)
-  Detectors-->>Ext: List of Findings [Scope, Tests, Deps, etc.]
-  Ext->>Runtime: Apply waivers (if allow_exceptions: true)
-  Ext->>Runtime: Write .intent/.violations.md
+    User->>Ext: File saved / CLI check / git push
+    Ext->>Git: Snapshot current working tree (temp index)
+    Git-->>Ext: Current tree hash (e.g. 9c4d3e)
+    Ext->>Git: diffTrees(baseline, current)
+    Git-->>Ext: ParsedDiff (added, deleted, modified, hunks)
+    Ext->>Detectors: detectFindingsForWorkspace(...)
+    Detectors-->>Ext: List of Findings [Scope, Tests, Deps, etc.]
+    Ext->>Runtime: Apply waivers (if allow_exceptions: true)
+    Ext->>Runtime: Write .intent/.violations.md
 
-  alt Active Errors Exist
-    Ext-->>User: Status: FAIL (Red Status Bar, Diagnostics, Exit 1, Push Blocked)
-  else Clean or Only Warnings
-    Ext-->>User: Status: PASS (Green Status Bar, Exit 0, Push Allowed)
-  end
+    alt Active Errors Exist
+        Ext-->>User: Status: FAIL (Red Status Bar, Diagnostics, Exit 1, Push Blocked)
+    else Clean or Only Warnings
+        Ext-->>User: Status: PASS (Green Status Bar, Exit 0, Push Allowed)
+    end
 
-  opt Revert Violations
-    User->>Ext: Revert File (UI or MCP)
-    Ext->>Git: Restore baseline blob to disk
-  end
+    opt Revert Violations
+        User->>Ext: Revert File (UI or MCP)
+        Ext->>Git: Restore baseline blob to disk
+    end
 
-  opt Waive Finding (if authorized)
-    User->>Ext: Waive Finding (Reason + Timestamp)
-    Ext->>Runtime: Append to .intent/waivers.json
-  end
+    opt Waive Finding (if authorized)
+        User->>Ext: Waive Finding (Reason + Timestamp)
+        Ext->>Runtime: Append to .intent/waivers.json
+    end
 
-  User->>Ext: Stop Contract
-  Ext->>Git: Release baseline ref
-  Ext->>Runtime: Remove .state.json & .violations.md
+    User->>Ext: Stop Contract
+    Ext->>Git: Release baseline ref
+    Ext->>Runtime: Remove .state.json & .violations.md
 ```
 
 ---
