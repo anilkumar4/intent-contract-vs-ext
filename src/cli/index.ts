@@ -1,7 +1,23 @@
 #!/usr/bin/env node
+import fs from "node:fs/promises";
 import path from "node:path";
 import { findRepositoryRoot } from "../git/cli";
-import { normalizeContractPath, revertIntentFile, startIntentContract, stopIntentContract, verifyIntentContract } from "../runtime/contracts";
+import {
+  ensurePolicyBaselineRef,
+  getActiveContract,
+  normalizeContractPath,
+  policyTreeHash,
+  revertIntentFile,
+  startIntentContract,
+  stopIntentContract,
+  verifyIntentContract
+} from "../runtime/contracts";
+import { createWorkingTreeSnapshot } from "../git/snapshot";
+import { diffTrees } from "../git/diff";
+import { detectFindingsForWorkspace } from "../detectors";
+import { readWaiversForContract } from "../state/waivers";
+import { readSession } from "../state/session";
+import { generateComplianceReport } from "../state/report";
 import { installPreCommitHook, installPrePushHook } from "../config/agentConfig";
 import type { Finding } from "../detectors/types";
 
@@ -44,7 +60,67 @@ export async function runCli(argv: string[], workingDirectory = process.cwd()): 
       const options = parseCheckOptions(filtered.slice(1));
       const result = await verifyIntentContract(root, options);
       writeCheckResult(result.findings, result.errorCount, result.warningCount, result.passed, options.format);
+
+      if (process.env.GITHUB_STEP_SUMMARY) {
+        try {
+          const banner = `## 🛡️ Intent Contract CI Status: ${result.passed ? "✅ PASSED" : "❌ FAILED"}\n` +
+            `- **Active Errors**: ${result.errorCount}\n` +
+            `- **Active Warnings**: ${result.warningCount}\n` +
+            `- **Total Findings**: ${result.findings.length}\n\n` +
+            (result.remediationInstructions ? `### Remediation Instructions\n\`\`\`\n${result.remediationInstructions}\n\`\`\`\n` : "");
+          await fs.appendFile(process.env.GITHUB_STEP_SUMMARY, banner, "utf8");
+        } catch {
+          // Ignore
+        }
+      }
+
       return result.passed ? 0 : 1;
+    }
+    if (command === "report") {
+      let outputPath: string | undefined;
+      const outputIndex = filtered.indexOf("--output");
+      if (outputIndex >= 0 && filtered[outputIndex + 1]) {
+        outputPath = path.resolve(workspace, filtered[outputIndex + 1]);
+      }
+      const existing = await readSession(root);
+      if (!existing) {
+        throw new Error("No active Intent Contract session was found. Start a contract session before exporting a report.");
+      }
+      const session = await ensurePolicyBaselineRef(root, existing);
+      const summary = await getActiveContract(root);
+      const policyTree = policyTreeHash(session);
+      const currentTree = await createWorkingTreeSnapshot(root, summary.contract.scope.read_only);
+      const diff = await diffTrees(root, policyTree, currentTree);
+      const allFindings = await detectFindingsForWorkspace(root, policyTree, diff, summary.contract, summary.path);
+      const waivers = await readWaiversForContract(root, summary.contract.allow_exceptions);
+
+      const generatedPath = await generateComplianceReport({
+        root,
+        session,
+        contract: summary.contract,
+        changes: diff.changes,
+        findings: allFindings,
+        waivers
+      });
+
+      if (outputPath) {
+        await fs.mkdir(path.dirname(outputPath), { recursive: true });
+        await fs.copyFile(generatedPath, outputPath);
+      }
+
+      const stepSummaryFile = process.env.GITHUB_STEP_SUMMARY;
+      if (stepSummaryFile) {
+        try {
+          const reportMarkdown = await fs.readFile(generatedPath, "utf8");
+          await fs.appendFile(stepSummaryFile, `\n\n${reportMarkdown}\n`, "utf8");
+          process.stdout.write("Appended compliance certificate to GITHUB_STEP_SUMMARY.\n");
+        } catch {
+          // Ignore
+        }
+      }
+
+      process.stdout.write(`Compliance report generated: ${outputPath ?? generatedPath}\n`);
+      return 0;
     }
     if (command === "revert") {
       const file = filtered[1];
@@ -162,6 +238,7 @@ function writeUsage(): void {
     "Intent Contract CLI\n\n" +
     "  intent-contract start <contract-name> [--force]\n" +
     "  intent-contract check [--base <git-ref>] [--contract <path>] [--format text|json|github] [--index | --revision <commit>]\n" +
+    "  intent-contract report [--output <path>]\n" +
     "  intent-contract revert <file>\n" +
     "  intent-contract hook install\n" +
     "  intent-contract guide\n" +

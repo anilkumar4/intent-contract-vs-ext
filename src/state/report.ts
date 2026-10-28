@@ -1,8 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { Contract } from "../contract/schema";
+import type { Contract, FileChange, Finding } from "../detectors/types";
 import type { ContractSession } from "./session";
-import type { FileChange, Finding } from "../detectors/types";
 import type { Waiver } from "./waivers";
 import { policyTreeHash } from "../runtime/contracts";
 

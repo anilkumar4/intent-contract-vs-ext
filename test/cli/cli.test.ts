@@ -160,6 +160,32 @@ describe("headless CLI", () => {
     expect(output.join("")).toContain("Intent Contract Vibe Coding Guide:");
     expect(output.join("")).toContain("vibe-coding-guide.md");
   });
+
+  it("generates a session compliance report and attaches to GITHUB_STEP_SUMMARY when set", async () => {
+    const root = await createRepository();
+    await runCli(["start", "test"], root);
+
+    const stepSummaryFile = path.join(root, "step_summary.md");
+    process.env.GITHUB_STEP_SUMMARY = stepSummaryFile;
+    try {
+      const output: string[] = [];
+      vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {
+        output.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
+        return true;
+      }) as typeof process.stdout.write);
+
+      const code = await runCli(["report"], root);
+      expect(code).toBe(0);
+      expect(output.join("")).toContain("Compliance report generated:");
+      expect(output.join("")).toContain("Appended compliance certificate to GITHUB_STEP_SUMMARY");
+
+      const summaryContent = await fs.readFile(stepSummaryFile, "utf8");
+      expect(summaryContent).toContain("Intent Contract AI Safety & Compliance Certificate");
+      expect(summaryContent).toContain("test");
+    } finally {
+      delete process.env.GITHUB_STEP_SUMMARY;
+    }
+  });
 });
 
 async function createRepository(): Promise<string> {

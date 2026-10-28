@@ -62,6 +62,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Session Audit & Compliance Report Generator (`src/state/report.ts`)**:
   - Added `Intent Contract: Export Session Compliance Report` (`intentContract.exportReport`).
   - Generates enterprise-ready compliance certificates in `.intent/reports/compliance-report-<timestamp>.md` with an AI Safety Scorecard across 5 dimensions, modified files ledger, and cryptographic Git audit seal.
+- **Headless CLI Report Command & CI GitHub Step Summary (`src/cli/index.ts`)**:
+  - Added `intent-contract report [--output <path>]` command to generate enterprise compliance certificates headlessly in terminal and CI environments.
+  - Automatically appends the AI Safety Certificate to `$GITHUB_STEP_SUMMARY` in GitHub Actions CI, displaying the report directly in the Pull Request workflow run tab.
+  - `intent-contract check` automatically renders a GitHub Actions run summary banner with error/warning counts and structured remediation instructions.
+- **Smart Waiver Justification Templates (`src/ui/actions.ts`)**:
+  - Replaced raw text input with smart quick-select justification templates (`Authorized refactoring`, `Approved scope extension`, `Approved dependency update`, `Architectural boundary exception`) with custom fallback for rapid 1-click approvals.
+- **Mission Control Dashboard Enhancements (`src/ui/dashboard.ts`)**:
+  - Added direct buttons for `📑 Export Compliance Report` and `🤖 Configure Agents & Hooks` directly in the Mission Control toolbar.
 
 ### Fixed
 - **Symbol Scope Attribution for Local Variables**:

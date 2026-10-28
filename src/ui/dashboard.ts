@@ -101,6 +101,12 @@ export class MissionControlDashboardPanel {
           case "openWalkthrough":
             void vscode.commands.executeCommand("intentContract.openWalkthrough");
             break;
+          case "exportReport":
+            void vscode.commands.executeCommand("intentContract.exportReport");
+            break;
+          case "configureAgents":
+            void vscode.commands.executeCommand("intentContract.configureAgents");
+            break;
         }
       },
       null,
@@ -352,9 +358,11 @@ export class MissionControlDashboardPanel {
 
   <div class="toolbar">
     <button class="btn btn-primary" onclick="sendMessage('recheck')">🔄 Re-check Now</button>
-    ${isActive ? `<button class="btn btn-secondary" onclick="sendMessage('copyAgentPrompt')">📋 Copy Corrective Prompt for Agent</button>` : ""}
+    ${isActive ? `<button class="btn btn-secondary" onclick="sendMessage('copyAgentPrompt')">📋 Copy Prompt for Agent</button>` : ""}
+    ${isActive ? `<button class="btn btn-secondary" onclick="sendMessage('exportReport')">📑 Export Compliance Report</button>` : ""}
     ${isActive && activeFindings.length > 0 ? `<button class="btn btn-secondary" onclick="sendMessage('revertOutOfScope')">⚡ Revert Out-of-Scope Files</button>` : ""}
     ${isActive ? `<button class="btn btn-danger" onclick="sendMessage('stopContract')">⏹ Stop Session</button>` : `<button class="btn btn-primary" onclick="sendMessage('openVisualBuilder')">⚡ Open Visual Contract Builder</button>`}
+    <button class="btn btn-secondary" onclick="sendMessage('configureAgents')">🤖 Configure Agents & Hooks</button>
     <button class="btn btn-secondary" onclick="sendMessage('openWalkthrough')">🚀 Getting Started Walkthrough</button>
     <button class="btn btn-secondary" onclick="sendMessage('openGuide')">📖 Vibe Coding Guide</button>
   </div>

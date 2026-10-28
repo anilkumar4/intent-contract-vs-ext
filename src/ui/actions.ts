@@ -79,13 +79,31 @@ export async function waiveFinding(finding: Finding | undefined, context: Action
     void vscode.window.showInformationMessage("This finding is already waived.");
     return;
   }
-  const reason = await vscode.window.showInputBox({
-    prompt: `Why should this finding be waived? (${selected.file})`,
-    placeHolder: "Record the reason for this exception",
-    ignoreFocusOut: true,
-    validateInput: (value) => value.trim().length === 0 ? "A reason is required." : undefined
+  const templates = [
+    `Authorized refactoring of ${selected.file}`,
+    `Approved scope extension for ${selected.file}`,
+    `Approved dependency update in ${selected.file}`,
+    `Architectural boundary exception for legacy migration`,
+    "Enter a custom reason..."
+  ];
+
+  const pick = await vscode.window.showQuickPick(templates, {
+    placeHolder: `Choose a justification template or enter custom reason (${selected.file})`
   });
-  if (!reason?.trim()) return;
+  if (!pick) return;
+
+  let reason = pick;
+  if (pick === "Enter a custom reason...") {
+    const input = await vscode.window.showInputBox({
+      prompt: `Why should this finding be waived? (${selected.file})`,
+      placeHolder: "Record the reason for this exception",
+      ignoreFocusOut: true,
+      validateInput: (value) => value.trim().length === 0 ? "A reason is required." : undefined
+    });
+    if (!input?.trim()) return;
+    reason = input.trim();
+  }
+
   await addWaiver(root, { id: selected.id, reason: reason.trim(), timestamp: new Date().toISOString() });
   await context.refresh();
 }
