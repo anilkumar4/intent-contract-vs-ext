@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { diffTrees } from "../../src/git/diff";
 import { revertFileToBaseline } from "../../src/git/revert";
-import { captureBaseline, createWorkingTreeSnapshot } from "../../src/git/snapshot";
+import { captureBaseline, createWorkingTreeSnapshot, updateContractInBaseline } from "../../src/git/snapshot";
 
 const temporaryRepositories: string[] = [];
 
@@ -87,8 +87,45 @@ describe("temporary index baseline", () => {
     expect(await fs.readFile(path.join(root, "preexisting.txt"), "utf8")).toBe("already here\n");
     expect(git(root, ["rev-parse", ":tracked.txt"]).trim()).toBe(stagedBlobBefore);
   });
+
+  it("updates contract in baseline tree without modifying other files", async () => {
+    const root = await fs.mkdtemp(path.join(process.cwd(), ".intent-contract-update-test-"));
+    temporaryRepositories.push(root);
+    vi.spyOn(os, "tmpdir").mockReturnValue(process.cwd());
+    git(root, ["init"]);
+    git(root, ["config", "user.name", "Intent Contract Test"]);
+    git(root, ["config", "user.email", "intent-test@example.invalid"]);
+
+    await fs.mkdir(path.join(root, ".intent"), { recursive: true });
+    await fs.writeFile(path.join(root, ".intent", "task.yaml"), "name: task\nscope:\n  modify: [src/**]\n");
+    await fs.writeFile(path.join(root, "app.ts"), "const initial = 1;\n");
+    git(root, ["add", "."]);
+    git(root, ["commit", "-m", "initial"]);
+
+    const snapshot = await captureBaseline(root);
+    const initialTree = snapshot.baselineTreeHash;
+
+    // Now hash a new contract content
+    const updatedContent = "name: task\nscope:\n  modify: [src/**, lib/**]\n  modify_symbols: [helperFunc]\n";
+    const blobSha = git(root, ["hash-object", "-w", "--stdin"], { input: updatedContent }).trim();
+
+    const newTree = await updateContractInBaseline(root, initialTree, ".intent/task.yaml", blobSha);
+    expect(newTree).not.toBe(initialTree);
+
+    // Verify contract in new tree matches updated content
+    const catBlob = git(root, ["cat-file", "blob", `${newTree}:.intent/task.yaml`]);
+    expect(catBlob).toBe(updatedContent);
+
+    // Verify app.ts in new tree is untouched
+    const catApp = git(root, ["cat-file", "blob", `${newTree}:app.ts`]);
+    expect(catApp).toBe("const initial = 1;\n");
+  });
 });
 
-function git(root: string, args: string[]): string {
-  return execFileSync("git", ["-C", root, ...args], { encoding: "utf8", windowsHide: true });
+function git(root: string, args: string[], options: { input?: string } = {}): string {
+  return execFileSync("git", ["-C", root, ...args], {
+    encoding: "utf8",
+    windowsHide: true,
+    input: options.input
+  });
 }

@@ -158,6 +158,18 @@ async function applyCandidatePaths(
   }
 }
 
+export async function updateContractInBaseline(
+  root: string,
+  baseTree: string,
+  contractRepoPath: string,
+  blobSha: string
+): Promise<string> {
+  return applyCandidatePaths(root, baseTree, contractRepoPath, async () => ({
+    mode: "100644",
+    objectId: blobSha
+  }));
+}
+
 function shouldTrackIgnoredFile(filePath: string, readOnlyPatterns: string[]): boolean {
   if (highRiskRule(filePath) !== undefined) return true;
   const normalized = filePath.replace(/\\/g, "/");

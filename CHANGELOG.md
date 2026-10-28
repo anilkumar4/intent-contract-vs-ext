@@ -33,6 +33,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Built-in visual contract creator webview (`Intent Contract: Visual Contract Builder`) that allows developers to define task boundaries, allowed file globs, symbol constraints, and forbidden risks without manually editing YAML. Includes automated workspace directory detection, active-editor symbol extraction, and 1-click AI task prompt generation.
 - **Native Getting Started Walkthrough**:
   - 5-step interactive onboarding walkthrough integrated natively into VS Code's Welcome experience to guide new developers through task boundary definition, agent connection, and safe pushing.
+- **Live Mission Control Dashboard (Option A)**:
+  - Interactive webview panel (`Intent Contract: Open Mission Control Dashboard`) providing real-time health scorecards across Scope Adherence, Test Fidelity, Dependency Security, and Architectural Boundaries.
+  - Generates 1-click corrective agent prompts with complete finding context and precise remediation guidance.
+  - Direct controls for 1-click out-of-scope reverts, re-checking, stopping sessions, and launching the Visual Contract Builder.
+- **Interactive Visual Architecture Drift Inspector (Option B)**:
+  - Visual diagram explorer (`Intent Contract: View Architecture Drift Inspector`) rendering the baseline architecture diagram overlaid with live compliance edges.
+  - Highlights allowed module links in green and renders offending cross-module imports as highlighted red dashed arrows.
+  - Provides a breach triage table with direct "Jump to Line" editor navigation and "Revert" actions for offending imports.
+- **In-Editor Symbol & Scope Helpers (Option C)**:
+  - Context menu actions in editor and file explorer: `Intent Contract: Add Symbol to Active Scope`, `Intent Contract: Add File to Active Scope (Modify)`, and `Intent Contract: Mark File as Read-Only`.
+  - Automatically updates `.intent/*.yaml` and dynamically synchronizes the active Git baseline tree so contract boundaries expand or contract without restarting sessions or losing baseline snapshots.
+- **MCP 2.0 Autonomous Agent Self-Healing Tools (Option D)**:
+  - Added `get_remediation_instructions` tool to provide structured, actionable step-by-step guidance for autonomous agents (Cursor, Claude Code, GitHub Copilot, Google Antigravity).
+  - Added `self_heal_contract` tool for autonomous remediation, safely reverting out-of-scope file modifications while preserving valid in-scope progress.
 
 ### Fixed
 - **Symbol Scope Attribution for Local Variables**:

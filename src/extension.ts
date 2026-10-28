@@ -6,12 +6,12 @@ import { createDefaultContract, ensureIntentMetadataIgnored } from "./contract/t
 import { discoverContracts, loadContract, parseContract } from "./contract/loader";
 import type { Contract } from "./contract/schema";
 import { detectFindingsForWorkspace } from "./detectors";
-import { analyzeArchitectureDrift, renderArchitectureDriftDiagram } from "./detectors/architectureDrift";
+import { analyzeArchitectureDrift, renderArchitectureDriftDiagram, type ArchitectureAnalysis } from "./detectors/architectureDrift";
 import type { FileChange, Finding } from "./detectors/types";
 import { diffTrees } from "./git/diff";
 import { captureBaseline, createWorkingTreeSnapshot } from "./git/snapshot";
 import { findRepositoryRoot, gitBuffer } from "./git/cli";
-import { ensurePolicyBaselineRef, policyTreeHash, releaseSessionBaselineRefs } from "./runtime/contracts";
+import { ensurePolicyBaselineRef, policyTreeHash, releaseSessionBaselineRefs, revertIntentFile, revertOutOfScopeFiles } from "./runtime/contracts";
 import { removeSession, readSession, writeSession, type ContractSession } from "./state/session";
 import { readWaiversForContract, type Waiver } from "./state/waivers";
 import { writeViolationSummary } from "./state/violations";
@@ -21,6 +21,9 @@ import { FindingDiagnostics } from "./ui/diagnostics";
 import { ContractStatusBar } from "./ui/statusBar";
 import { FindingsTreeProvider } from "./ui/treeView";
 import { VisualContractBuilderPanel } from "./ui/visualBuilder";
+import { MissionControlDashboardPanel } from "./ui/dashboard";
+import { ArchitectureInspectorPanel } from "./ui/architectureInspector";
+import { addSymbolToScope, addFileToScope, markFileReadOnly } from "./ui/scopeHelpers";
 import { toRepoPath } from "./util/paths";
 import { configureAgentIntegrations, type AgentIntegration } from "./config/agentConfig";
 
@@ -31,6 +34,7 @@ let contract: Contract | undefined;
 let findings: Finding[] = [];
 let changes: FileChange[] = [];
 let waivers = new Map<string, Waiver>();
+let latestArchitectureAnalysis: ArchitectureAnalysis | undefined;
 let checkRunning = false;
 let checkQueued = false;
 let queuedResolvers: Array<() => void> = [];
@@ -95,6 +99,83 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.commands.registerCommand("intentContract.openWalkthrough", () => {
       return vscode.commands.executeCommand("workbench.action.openWalkthrough", "anilkumar4.intent-contract#intentContractWalkthrough", false);
+    }),
+    vscode.commands.registerCommand("intentContract.openDashboard", () => {
+      return MissionControlDashboardPanel.createOrShow(
+        context.extensionUri,
+        () => ({
+          root,
+          session,
+          contract,
+          findings,
+          changes,
+          waivers
+        }),
+        async () => {
+          await runCheck();
+        },
+        async () => {
+          if (root) {
+            await revertOutOfScopeFiles(root);
+            await runCheck();
+          }
+        },
+        async () => {
+          await stopContract();
+        }
+      );
+    }),
+    vscode.commands.registerCommand("intentContract.visualizeArchitecture", async () => {
+      if (!latestArchitectureAnalysis && root && session && contract?.architecture && contract.forbid.includes("architecture_drift")) {
+        try {
+          const activePolicyTree = policyTreeHash(session);
+          const currentTreeHash = await createWorkingTreeSnapshot(root, contract.scope.read_only);
+          const currentDiff = await diffTrees(root, activePolicyTree, currentTreeHash);
+          latestArchitectureAnalysis = await analyzeArchitectureDrift(root, activePolicyTree, currentDiff, contract, session.activeContract);
+        } catch {
+          // Ignore
+        }
+      }
+      return ArchitectureInspectorPanel.createOrShow(
+        context.extensionUri,
+        () => ({
+          root,
+          session,
+          contract,
+          analysis: latestArchitectureAnalysis,
+          diagramPath: contract?.architecture?.diagram
+        }),
+        async () => {
+          await runCheck();
+        },
+        async (file: string) => {
+          if (root) {
+            await revertIntentFile(root, file);
+            await runCheck();
+          }
+        }
+      );
+    }),
+    vscode.commands.registerCommand("intentContract.addSymbolToScope", async (symbolArg?: string) => {
+      const repoRoot = root ?? await workspaceRepositoryRoot();
+      if (!repoRoot) return;
+      await addSymbolToScope(repoRoot, () => session, async () => {
+        await runCheck();
+      }, typeof symbolArg === "string" ? symbolArg : undefined);
+    }),
+    vscode.commands.registerCommand("intentContract.addFileToScope", async (uriArg?: vscode.Uri) => {
+      const repoRoot = root ?? await workspaceRepositoryRoot();
+      if (!repoRoot) return;
+      await addFileToScope(repoRoot, () => session, async () => {
+        await runCheck();
+      }, uriArg instanceof vscode.Uri ? uriArg : undefined);
+    }),
+    vscode.commands.registerCommand("intentContract.markFileReadOnly", async (uriArg?: vscode.Uri) => {
+      const repoRoot = root ?? await workspaceRepositoryRoot();
+      if (!repoRoot) return;
+      await markFileReadOnly(repoRoot, () => session, async () => {
+        await runCheck();
+      }, uriArg instanceof vscode.Uri ? uriArg : undefined);
     }),
     vscode.commands.registerCommand("intentContract.revertFile", async (value?: unknown) => revertFindingFile(unwrapFinding(value) ?? await chooseCurrentFinding(), actionContext)),
     vscode.commands.registerCommand("intentContract.waiveFinding", (value?: unknown) => waiveFinding(unwrapFinding(value), actionContext)),
@@ -294,9 +375,12 @@ async function stopContract(): Promise<void> {
   changes = [];
   findings = [];
   waivers = new Map();
+  latestArchitectureAnalysis = undefined;
   diagnostics.update(undefined, []);
   treeProvider.setState(false, [], waivers);
   statusBar.update(undefined, []);
+  if (MissionControlDashboardPanel.currentPanel) void MissionControlDashboardPanel.currentPanel.refresh();
+  if (ArchitectureInspectorPanel.currentPanel) void ArchitectureInspectorPanel.currentPanel.refresh();
   void vscode.window.showInformationMessage("Stopped the active Intent Contract.");
 }
 
@@ -380,9 +464,12 @@ async function performCheck(): Promise<void> {
       changes = [];
       findings = [];
       waivers = new Map();
+      latestArchitectureAnalysis = undefined;
       diagnostics.update(undefined, []);
       treeProvider?.setState(false, [], new Map());
       statusBar?.update(undefined, []);
+      if (MissionControlDashboardPanel.currentPanel) void MissionControlDashboardPanel.currentPanel.refresh();
+      if (ArchitectureInspectorPanel.currentPanel) void ArchitectureInspectorPanel.currentPanel.refresh();
     }
     return;
   }
@@ -412,6 +499,26 @@ async function performCheck(): Promise<void> {
     treeProvider.setState(true, nextFindings, nextWaivers);
     statusBar.update(contract.name, active);
     await writeViolationSummary(root, nextFindings, nextWaivers);
+
+    if (contract.architecture && contract.forbid.includes("architecture_drift")) {
+      try {
+        latestArchitectureAnalysis = await analyzeArchitectureDrift(
+          root,
+          activePolicyTree,
+          diff,
+          contract,
+          session.activeContract
+        );
+      } catch {
+        latestArchitectureAnalysis = undefined;
+      }
+    } else {
+      latestArchitectureAnalysis = undefined;
+    }
+
+    if (MissionControlDashboardPanel.currentPanel) void MissionControlDashboardPanel.currentPanel.refresh();
+    if (ArchitectureInspectorPanel.currentPanel) void ArchitectureInspectorPanel.currentPanel.refresh();
+
     output.appendLine(`[${new Date().toISOString()}] Checked ${diff.changes.length} changed file(s); ${active.length} active finding(s).`);
   } catch (error) {
     const message = `Intent Contract check failed: ${errorMessage(error)}`;

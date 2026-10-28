@@ -103,11 +103,25 @@ export class FindingsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
     if (waivedFindings.length > 0) roots.push({ kind: "waivedGroup", findings: waivedFindings, waivers: this.waivers });
     if (roots.length === 0) {
       if (this.active) {
-        roots.push({
-          kind: "empty",
-          message: "No active findings",
-          icon: new vscode.ThemeIcon("check")
-        });
+        roots.push(
+          {
+            kind: "empty",
+            message: "No active findings (100% compliant)",
+            icon: new vscode.ThemeIcon("pass-filled")
+          },
+          {
+            kind: "empty",
+            message: "Open Mission Control Dashboard...",
+            icon: new vscode.ThemeIcon("dashboard"),
+            command: { command: "intentContract.openDashboard", title: "Open Mission Control Dashboard" }
+          },
+          {
+            kind: "empty",
+            message: "Open Architecture Drift Inspector...",
+            icon: new vscode.ThemeIcon("graph"),
+            command: { command: "intentContract.visualizeArchitecture", title: "Open Architecture Drift Inspector" }
+          }
+        );
       } else {
         roots.push(
           {

@@ -138,6 +138,38 @@ async function callTool(root: string, params: Record<string, unknown>): Promise<
     const active = await startIntentContract(root, args.name.trim());
     return toolResult({ started: true, name: active.contract.name, path: active.path, startedAt: active.session.startedAt });
   }
+  if (name === "get_remediation_instructions") {
+    const verification = await verifyIntentContract(root);
+    return toolResult({
+      passed: verification.passed,
+      violationsCount: verification.findings.length,
+      remediationInstructions: verification.remediationInstructions,
+      findings: verification.findings
+    });
+  }
+  if (name === "self_heal_contract") {
+    const verificationBefore = await verifyIntentContract(root);
+    if (verificationBefore.passed) {
+      return toolResult({
+        healed: true,
+        revertedFiles: [],
+        message: "No active violations found. Contract is already compliant.",
+        remainingViolations: 0,
+        findings: []
+      });
+    }
+    const reverted = await revertOutOfScopeFiles(root);
+    const verificationAfter = await verifyIntentContract(root);
+    return toolResult({
+      healed: verificationAfter.passed,
+      revertedFiles: reverted,
+      message: verificationAfter.passed
+        ? `Successfully self-healed ${reverted.length} file(s). All active violations cleared.`
+        : `Reverted ${reverted.length} file(s). ${verificationAfter.errorCount} error(s) remain requiring code adjustment.`,
+      remainingViolations: verificationAfter.findings.length,
+      findings: verificationAfter.findings
+    });
+  }
   throw new Error("Unknown Intent Contract tool: " + name);
 }
 
@@ -182,6 +214,16 @@ const toolDefinitions = [
     name: "start_intent_contract",
     description: "Start a named contract from .intent/ when the user has instructed you to do so.",
     inputSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"], additionalProperties: false }
+  },
+  {
+    name: "get_remediation_instructions",
+    description: "Retrieve actionable step-by-step remediation instructions for all active contract findings to guide code correction.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false }
+  },
+  {
+    name: "self_heal_contract",
+    description: "Automatically revert out-of-scope files, unauthorized packages, or collateral edits back to the contract baseline to resolve violations.",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false }
   }
 ];
 

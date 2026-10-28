@@ -85,6 +85,31 @@
         "command": "intentContract.openWalkthrough",
         "title": "Intent Contract: Getting Started Walkthrough",
         "icon": "$(rocket)"
+      },
+      {
+        "command": "intentContract.openDashboard",
+        "title": "Intent Contract: Open Mission Control Dashboard",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "intentContract.visualizeArchitecture",
+        "title": "Intent Contract: View Architecture Drift Inspector",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "intentContract.addSymbolToScope",
+        "title": "Intent Contract: Add Symbol to Active Scope",
+        "icon": "$(symbol-method)"
+      },
+      {
+        "command": "intentContract.addFileToScope",
+        "title": "Intent Contract: Add File to Active Scope (Modify)",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "intentContract.markFileReadOnly",
+        "title": "Intent Contract: Mark File as Read-Only",
+        "icon": "$(lock)"
       }
     ],
     "viewsContainers": {
@@ -137,14 +162,53 @@
     "menus": {
       "view/title": [
         {
-          "command": "intentContract.visualBuilder",
+          "command": "intentContract.openDashboard",
           "when": "view == intentContractFindings",
           "group": "navigation@1"
         },
         {
-          "command": "intentContract.openGuide",
+          "command": "intentContract.visualizeArchitecture",
           "when": "view == intentContractFindings",
           "group": "navigation@2"
+        },
+        {
+          "command": "intentContract.visualBuilder",
+          "when": "view == intentContractFindings",
+          "group": "navigation@3"
+        },
+        {
+          "command": "intentContract.openGuide",
+          "when": "view == intentContractFindings",
+          "group": "navigation@4"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "intentContract.addSymbolToScope",
+          "when": "editorTextFocus",
+          "group": "intentContract@1"
+        },
+        {
+          "command": "intentContract.addFileToScope",
+          "when": "editorTextFocus",
+          "group": "intentContract@2"
+        },
+        {
+          "command": "intentContract.markFileReadOnly",
+          "when": "editorTextFocus",
+          "group": "intentContract@3"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "intentContract.addFileToScope",
+          "when": "!explorerResourceIsFolder",
+          "group": "intentContract@1"
+        },
+        {
+          "command": "intentContract.markFileReadOnly",
+          "when": "!explorerResourceIsFolder",
+          "group": "intentContract@2"
         }
       ],
       "view/item/context": [

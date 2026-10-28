@@ -31,7 +31,9 @@ describe("MCP stdio JSON-RPC protocol", () => {
       "get_active_contract",
       "verify_intent_contract",
       "revert_out_of_scope_files",
-      "start_intent_contract"
+      "start_intent_contract",
+      "get_remediation_instructions",
+      "self_heal_contract"
     ]);
 
     const active = JSON.parse((await handleRpcMessage(JSON.stringify({
@@ -96,6 +98,39 @@ describe("MCP stdio JSON-RPC protocol", () => {
 
     expect(response.result.isError).toBe(true);
     expect(response.result.content[0].text).toContain("session is already active");
+  });
+
+  it("provides remediation instructions and self-heals contract violations", async () => {
+    const root = await createRepository();
+    await startIntentContract(root, "test");
+
+    // Introduce an out-of-scope violation
+    await fs.writeFile(path.join(root, "test/locked.txt"), "modified out of scope\n");
+
+    // 1. Check get_remediation_instructions
+    const remediationRes = JSON.parse((await handleRpcMessage(JSON.stringify({
+      jsonrpc: "2.0",
+      id: 30,
+      method: "tools/call",
+      params: { name: "get_remediation_instructions", arguments: {} }
+    }), root)) ?? "{}") as { result: { structuredContent: { passed: boolean; violationsCount: number; findings: Array<{ file: string }> } } };
+
+    expect(remediationRes.result.structuredContent.passed).toBe(false);
+    expect(remediationRes.result.structuredContent.violationsCount).toBe(1);
+    expect(remediationRes.result.structuredContent.findings[0].file).toBe("test/locked.txt");
+
+    // 2. Call self_heal_contract
+    const healRes = JSON.parse((await handleRpcMessage(JSON.stringify({
+      jsonrpc: "2.0",
+      id: 31,
+      method: "tools/call",
+      params: { name: "self_heal_contract", arguments: {} }
+    }), root)) ?? "{}") as { result: { structuredContent: { healed: boolean; revertedFiles: string[]; remainingViolations: number } } };
+
+    expect(healRes.result.structuredContent.healed).toBe(true);
+    expect(healRes.result.structuredContent.revertedFiles).toContain("test/locked.txt");
+    expect(healRes.result.structuredContent.remainingViolations).toBe(0);
+    expect(await fs.readFile(path.join(root, "test/locked.txt"), "utf8")).toBe("baseline\n");
   });
 });
 
