@@ -27,6 +27,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Clean 5-column orthogonal layout design for system architecture diagrams with clear directional swimlanes and module boundaries.
 - **Vibe Coding Best Practices Guide**:
   - Comprehensive guide and workflow documentation detailing how Intent Contract guards developers against silent scope creep, test weakening ("faking green"), supply-chain hallucinations, and architecture erosion when pairing with autonomous AI agents (Cursor, Claude Code, GitHub Copilot, and Google Antigravity).
+- **Dedicated Activity Bar Container**:
+  - Elevated Intent Contract to a dedicated, first-class view container on the primary Activity Bar (left sidebar) with quick session controls and findings management.
+- **Interactive Visual Contract Builder**:
+  - Built-in visual contract creator webview (`Intent Contract: Visual Contract Builder`) that allows developers to define task boundaries, allowed file globs, symbol constraints, and forbidden risks without manually editing YAML. Includes automated workspace directory detection, active-editor symbol extraction, and 1-click AI task prompt generation.
+- **Native Getting Started Walkthrough**:
+  - 5-step interactive onboarding walkthrough integrated natively into VS Code's Welcome experience to guide new developers through task boundary definition, agent connection, and safe pushing.
 
 ### Fixed
 - **Symbol Scope Attribution for Local Variables**:

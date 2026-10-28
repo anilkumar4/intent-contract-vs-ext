@@ -112,15 +112,27 @@ export class FindingsTreeProvider implements vscode.TreeDataProvider<TreeNode> {
         roots.push(
           {
             kind: "empty",
-            message: "Start a Contract...",
+            message: "Start a Contract Session...",
             icon: new vscode.ThemeIcon("play"),
             command: { command: "intentContract.start", title: "Start Contract" }
           },
           {
             kind: "empty",
-            message: "Create Contract Template...",
-            icon: new vscode.ThemeIcon("add"),
-            command: { command: "intentContract.createTemplate", title: "Create Contract Template" }
+            message: "Visual Contract Builder...",
+            icon: new vscode.ThemeIcon("symbol-event"),
+            command: { command: "intentContract.visualBuilder", title: "Visual Contract Builder" }
+          },
+          {
+            kind: "empty",
+            message: "Configure AI Agents & MCP...",
+            icon: new vscode.ThemeIcon("hubot"),
+            command: { command: "intentContract.configureAgents", title: "Configure AI Agents" }
+          },
+          {
+            kind: "empty",
+            message: "Getting Started Walkthrough...",
+            icon: new vscode.ThemeIcon("rocket"),
+            command: { command: "intentContract.openWalkthrough", title: "Open Walkthrough" }
           },
           {
             kind: "empty",

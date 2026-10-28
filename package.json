@@ -73,8 +73,37 @@
         "command": "intentContract.openGuide",
         "title": "Intent Contract: Open Vibe Coding Guide",
         "icon": "$(book)"
+      },
+      {
+        "command": "intentContract.visualBuilder",
+        "title": "Intent Contract: Visual Contract Builder",
+        "icon": "$(symbol-event)"
+      },
+      {
+        "command": "intentContract.openWalkthrough",
+        "title": "Intent Contract: Getting Started Walkthrough",
+        "icon": "$(rocket)"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "intent-contract-sidebar",
+          "title": "Intent Contract",
+          "icon": "icon.png"
+        }
+      ]
+    },
+    "views": {
+      "intent-contract-sidebar": [
+        {
+          "id": "intentContractFindings",
+          "name": "Intent Contract Findings",
+          "icon": "icon.png",
+          "when": "workspaceFolderCount > 0"
+        }
+      ]
+    },
     "configuration": {
       "title": "Intent Contract",
       "properties": {
@@ -103,22 +132,17 @@
         }
       }
     },
-    "views": {
-      "explorer": [
-        {
-          "id": "intentContractFindings",
-          "name": "Intent Contract Findings",
-          "icon": "icon.png",
-          "when": "workspaceFolderCount > 0"
-        }
-      ]
-    },
     "menus": {
       "view/title": [
         {
+          "command": "intentContract.visualBuilder",
+          "when": "view == intentContractFindings",
+          "group": "navigation@1"
+        },
+        {
           "command": "intentContract.openGuide",
           "when": "view == intentContractFindings",
-          "group": "navigation"
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -138,7 +162,56 @@
           "group": "inline@3"
         }
       ]
-    }
+    },
+    "walkthroughs": [
+      {
+        "id": "intentContractWalkthrough",
+        "title": "Getting Started with Intent Contract",
+        "description": "Learn how to safely vibe code with autonomous AI agents using locked intent contracts and guardrails.",
+        "steps": [
+          {
+            "id": "welcome",
+            "title": "Welcome to Intent Contract",
+            "description": "Intent Contract is the safety harness for AI coding. It prevents autonomous agents from silent scope creep, faking green tests, and eroding system architecture.\\n\\n[Open Vibe Coding Guide](command:intentContract.openGuide)",
+            "media": {
+              "markdown": "walkthrough/welcome.md"
+            }
+          },
+          {
+            "id": "createContract",
+            "title": "Define Your Task Contract",
+            "description": "Declare what files and symbols your AI agent is allowed to modify, and what is forbidden.\\n\\n[Open Visual Contract Builder](command:intentContract.visualBuilder)",
+            "media": {
+              "markdown": "walkthrough/create-contract.md"
+            }
+          },
+          {
+            "id": "startSession",
+            "title": "Start Session & Lock Baseline",
+            "description": "Intent Contract captures a pristine baseline snapshot in Git. Changes made by your agent will be evaluated against this baseline in real time.\\n\\n[Start Contract Session](command:intentContract.start)",
+            "media": {
+              "markdown": "walkthrough/start-session.md"
+            }
+          },
+          {
+            "id": "configureAgents",
+            "title": "Connect Your AI Agent & MCP",
+            "description": "Generate prompt rules for Cursor, Claude Code, GitHub Copilot, and Google Antigravity, and install Git pre-push hooks.\\n\\n[Configure AI Agents & Hooks](command:intentContract.configureAgents)",
+            "media": {
+              "markdown": "walkthrough/configure-agents.md"
+            }
+          },
+          {
+            "id": "triageFindings",
+            "title": "Monitor, Revert & Push",
+            "description": "Inspect live diagnostics in the editor and sidebar. Revert hallucinated files back to the baseline with one click.\\n\\n[Open Intent Contract Sidebar](command:workbench.view.extension.intent-contract-sidebar)",
+            "media": {
+              "markdown": "walkthrough/triage.md"
+            }
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

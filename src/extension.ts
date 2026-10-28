@@ -20,6 +20,7 @@ import { BaselineContentProvider } from "./ui/baselineContentProvider";
 import { FindingDiagnostics } from "./ui/diagnostics";
 import { ContractStatusBar } from "./ui/statusBar";
 import { FindingsTreeProvider } from "./ui/treeView";
+import { VisualContractBuilderPanel } from "./ui/visualBuilder";
 import { toRepoPath } from "./util/paths";
 import { configureAgentIntegrations, type AgentIntegration } from "./config/agentConfig";
 
@@ -87,6 +88,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("intentContract.exportArchitectureDrift", () => exportArchitectureDriftDiagram()),
     vscode.commands.registerCommand("intentContract.openDiff", async (value?: unknown) => openFindingDiff(unwrapFinding(value) ?? await chooseCurrentFinding(), actionContext)),
     vscode.commands.registerCommand("intentContract.openGuide", () => openVibeCodingGuide(context)),
+    vscode.commands.registerCommand("intentContract.visualBuilder", () => {
+      return VisualContractBuilderPanel.createOrShow(context.extensionUri, async (name) => {
+        await startContractByName(name);
+      });
+    }),
+    vscode.commands.registerCommand("intentContract.openWalkthrough", () => {
+      return vscode.commands.executeCommand("workbench.action.openWalkthrough", "anilkumar4.intent-contract#intentContractWalkthrough", false);
+    }),
     vscode.commands.registerCommand("intentContract.revertFile", async (value?: unknown) => revertFindingFile(unwrapFinding(value) ?? await chooseCurrentFinding(), actionContext)),
     vscode.commands.registerCommand("intentContract.waiveFinding", (value?: unknown) => waiveFinding(unwrapFinding(value), actionContext)),
     vscode.commands.registerCommand("intentContract.statusClick", async () => {
@@ -94,7 +103,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       try {
         return await vscode.commands.executeCommand("intentContractFindings.focus");
       } catch {
-        return await vscode.commands.executeCommand("workbench.view.explorer");
+        return await vscode.commands.executeCommand("workbench.view.extension.intent-contract-sidebar");
       }
     })
   );
@@ -131,13 +140,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     void context.globalState.update("lastSeenGuideVersion", extensionVersion);
     void vscode.window.showInformationMessage(
       `Welcome to Intent Contract v${extensionVersion}! Guard your workspace during vibe coding with autonomous agents.`,
-      "Open Guide",
-      "Create Contract Template"
+      "Open Walkthrough",
+      "Visual Contract Builder",
+      "Open Guide"
     ).then(async (action) => {
-      if (action === "Open Guide") {
+      if (action === "Open Walkthrough") {
+        await vscode.commands.executeCommand("workbench.action.openWalkthrough", "anilkumar4.intent-contract#intentContractWalkthrough", false);
+      } else if (action === "Visual Contract Builder") {
+        await VisualContractBuilderPanel.createOrShow(context.extensionUri, async (name) => {
+          await startContractByName(name);
+        });
+      } else if (action === "Open Guide") {
         await openVibeCodingGuide(context);
-      } else if (action === "Create Contract Template") {
-        await createTemplate();
       }
     });
   }
@@ -173,11 +187,19 @@ async function startContract(): Promise<void> {
   if (files.length === 0) {
     const choice = await vscode.window.showInformationMessage(
       "No contract YAML files were found in .intent/.",
+      "Visual Contract Builder",
       "Create Contract From Template",
       "Open Vibe Coding Guide"
     );
-    if (choice === "Create Contract From Template") await createTemplate();
-    else if (choice === "Open Vibe Coding Guide" && extensionContext) await openVibeCodingGuide(extensionContext);
+    if (choice === "Visual Contract Builder" && extensionContext) {
+      await VisualContractBuilderPanel.createOrShow(extensionContext.extensionUri, async (name) => {
+        await startContractByName(name);
+      });
+    } else if (choice === "Create Contract From Template") {
+      await createTemplate();
+    } else if (choice === "Open Vibe Coding Guide" && extensionContext) {
+      await openVibeCodingGuide(extensionContext);
+    }
     return;
   }
   let selected = files[0];
@@ -210,6 +232,43 @@ async function startContract(): Promise<void> {
   session = {
     ...snapshot,
     activeContract: toRepoPath(path.relative(repoRoot, selected)),
+    originalBaselineTreeHash: snapshot.baselineTreeHash
+  };
+  contract = await loadContractFromBaseline(repoRoot, session);
+  await writeSession(repoRoot, session);
+  void vscode.window.showInformationMessage(`Started contract "${selectedContract.name}" from the current working tree.`);
+  await runCheck();
+}
+
+async function startContractByName(name: string): Promise<void> {
+  const repoRoot = await workspaceRepositoryRoot();
+  if (!repoRoot) return;
+  if (await readSession(repoRoot)) {
+    void vscode.window.showWarningMessage("A contract session is already active. Stop it before starting a replacement baseline.");
+    return;
+  }
+  const files = await discoverContracts(repoRoot);
+  const matched = files.find((f) => path.basename(f, path.extname(f)).toLowerCase() === name.toLowerCase()) ?? files[0];
+  if (!matched) {
+    void vscode.window.showErrorMessage(`Contract "${name}" was not found in .intent/.`);
+    return;
+  }
+
+  let selectedContract: Contract;
+  try {
+    selectedContract = await loadContract(matched);
+  } catch (error) {
+    void vscode.window.showErrorMessage(errorMessage(error));
+    return;
+  }
+
+  root = repoRoot;
+  contract = selectedContract;
+  await ensureIntentMetadataIgnored(repoRoot);
+  const snapshot = await captureBaseline(repoRoot, selectedContract.scope.read_only);
+  session = {
+    ...snapshot,
+    activeContract: toRepoPath(path.relative(repoRoot, matched)),
     originalBaselineTreeHash: snapshot.baselineTreeHash
   };
   contract = await loadContractFromBaseline(repoRoot, session);

@@ -6,5 +6,6 @@ dist/*.map
 !README.md
 !CHANGELOG.md
 !docs/vibe-coding-guide.md
+!walkthrough/**
 !LICENSE
 !icon.png
