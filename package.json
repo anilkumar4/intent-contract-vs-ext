@@ -295,7 +295,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:smoke": "npm run compile && node ./test/smoke/run.js",
-    "build": "npm run compile && vsce package --allow-missing-repository --out intent-contract.vsix"
+    "build": "node scripts/build-vsix.mjs",
+    "build:no-bump": "node scripts/build-vsix.mjs --no-bump",
+    "build:minor": "node scripts/build-vsix.mjs --minor",
+    "build:major": "node scripts/build-vsix.mjs --major",
+    "package": "node scripts/build-vsix.mjs"
   },
   "dependencies": {
     "picomatch": "^4.0.2",
