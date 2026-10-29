@@ -1,3 +1,32 @@
 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2.25L4.5 5.5V11.25C4.5 16.5 7.8 21.3 12 22.5C16.2 21.3 19.5 16.5 19.5 11.25V5.5L12 2.25ZM6 6.75L12 4.125L18 6.75V11.25C18 15.375 15.375 19.275 12 20.475C8.625 19.275 6 15.375 6 11.25V6.75ZM10.5 14.85L8.1 12.45L9.15 11.4L10.5 12.75L14.85 8.4L15.9 9.45L10.5 14.85Z" fill="currentColor"/>
+  <defs>
+    <linearGradient id="shieldBorder" x1="4" y1="2.5" x2="20" y2="21.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#6D28D9"/>
+    </linearGradient>
+    <linearGradient id="checkGrad" x1="7" y1="16" x2="19.5" y2="6.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#9333EA"/>
+      <stop offset="100%" stop-color="#C084FC"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Outer Shield -->
+  <path d="M4.5 4.5C4.5 3.67 5.17 3 6 3H18C18.83 3 19.5 3.67 19.5 4.5V11.5C19.5 16.2 16.3 20.2 12 21.5C7.7 20.2 4.5 16.2 4.5 11.5V4.5Z" 
+        fill="#1E1B4B" fill-opacity="0.85" stroke="url(#shieldBorder)" stroke-width="1.6" stroke-linejoin="round"/>
+
+  <!-- Contract Document -->
+  <path d="M7.8 6.5H13.6L16.2 9.1V15C16.2 15.55 15.75 16 15.2 16H7.8C7.25 16 6.8 15.55 6.8 15V7.5C6.8 6.95 7.25 6.5 7.8 6.5Z" 
+        fill="#2E1065" fill-opacity="0.9" stroke="#8B5CF6" stroke-width="1.1" stroke-linejoin="round"/>
+  
+  <!-- Document Folded Corner -->
+  <path d="M13.6 6.5V9.1H16.2" fill="#4C1D95" stroke="#8B5CF6" stroke-width="1.1" stroke-linejoin="round"/>
+
+  <!-- Contract Clause Lines -->
+  <line x1="8.6" y1="9.4" x2="12.2" y2="9.4" stroke="#A78BFA" stroke-width="1" stroke-linecap="round"/>
+  <line x1="8.6" y1="11.4" x2="14.4" y2="11.4" stroke="#A78BFA" stroke-width="1" stroke-linecap="round"/>
+  <line x1="8.6" y1="13.4" x2="12" y2="13.4" stroke="#A78BFA" stroke-width="1" stroke-linecap="round"/>
+
+  <!-- Bold Neon Checkmark -->
+  <path d="M7.8 12.2L10.6 15L18.4 6.8" 
+        stroke="url(#checkGrad)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
