@@ -87,4 +87,85 @@ describe("AI agent configuration helpers", () => {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
+
+  it("real pre-commit hook execution actually blocks git commit when staged index violates active contract", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "intent-real-hook-"));
+    const cliPath = path.resolve(__dirname, "../../dist/cli.js");
+    try {
+      execFileSync("git", ["init", "-q", root]);
+      execFileSync("git", ["-C", root, "config", "user.name", "Hook Test"]);
+      execFileSync("git", ["-C", root, "config", "user.email", "hook@test.local"]);
+
+      // Initial clean commit
+      await fs.mkdir(path.join(root, ".intent"), { recursive: true });
+      await fs.mkdir(path.join(root, "src"), { recursive: true });
+      await fs.mkdir(path.join(root, "test"), { recursive: true });
+      await fs.writeFile(path.join(root, ".intent/test.yaml"), [
+        "name: test",
+        "intent: Only allow src",
+        "scope:",
+        "  modify: [src/**]",
+        "  read_only: [test/**]",
+        "forbid: []",
+        "allow_exceptions: false"
+      ].join("\n") + "\n");
+      await fs.writeFile(path.join(root, "src/app.ts"), "export const a = 1;\n");
+      await fs.writeFile(path.join(root, "test/locked.txt"), "protected baseline\n");
+      execFileSync("git", ["-C", root, "add", "."]);
+      execFileSync("git", ["-C", root, "commit", "-m", "initial"]);
+
+      // Install hooks using actual built dist/cli.js
+      await installPreCommitHook(root, cliPath);
+
+      // Start contract
+      const { startIntentContract } = await import("../../src/runtime/contracts");
+      await startIntentContract(root, "test");
+
+      // 1. Staging permitted file should allow git commit
+      await fs.writeFile(path.join(root, "src/app.ts"), "export const a = 2;\n");
+      execFileSync("git", ["-C", root, "add", "src/app.ts"]);
+      expect(() => {
+        execFileSync("git", ["-C", root, "commit", "-m", "permitted change"], { stdio: "pipe" });
+      }).not.toThrow();
+
+      // 2. Staging a read-only violation should block git commit!
+      await fs.writeFile(path.join(root, "test/locked.txt"), "tampered content\n");
+      execFileSync("git", ["-C", root, "add", "test/locked.txt"]);
+      let blockedError: any;
+      try {
+        execFileSync("git", ["-C", root, "commit", "-m", "violating change"], { stdio: "pipe" });
+      } catch (err: any) {
+        blockedError = err;
+      }
+      expect(blockedError).toBeDefined();
+      const stderr = blockedError?.stderr?.toString() ?? "";
+      expect(stderr).toContain("Commit BLOCKED");
+
+      // 3. Pre-push hook blocks git push when pushing a revision containing violations!
+      const bareRemote = await fs.mkdtemp(path.join(os.tmpdir(), "intent-bare-remote-"));
+      try {
+        execFileSync("git", ["init", "--bare", "-q", bareRemote]);
+        execFileSync("git", ["-C", root, "remote", "add", "origin", bareRemote]);
+        await installPrePushHook(root, cliPath);
+
+        // Commit with --no-verify to bypass pre-commit hook so revision exists locally
+        execFileSync("git", ["-C", root, "commit", "-n", "-m", "bypassed commit"]);
+
+        // Pushing this revision to remote MUST be blocked by pre-push hook!
+        let pushBlockedError: any;
+        try {
+          execFileSync("git", ["-C", root, "push", "origin", "HEAD:main"], { stdio: "pipe" });
+        } catch (err: any) {
+          pushBlockedError = err;
+        }
+        expect(pushBlockedError).toBeDefined();
+        const pushStderr = pushBlockedError?.stderr?.toString() ?? "";
+        expect(pushStderr).toContain("Git push BLOCKED!");
+      } finally {
+        await fs.rm(bareRemote, { recursive: true, force: true });
+      }
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
 });
