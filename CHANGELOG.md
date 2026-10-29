@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.4] - 2026-10-29
+
+### Fixed & Improved
+- **Vibrant Brand Vector Activity Bar Icon**:
+  - Restored the authentic Intent Contract brand visual identity in `media/activitybar.svg`.
+  - Replaced the temporary monochrome shield with a rich vector SVG rendering the electric violet/purple outer shield (`#8B5CF6` to `#6D28D9`), deep translucent purple interior, contract document with folded dog-ear corner and clause lines (`#A78BFA`), and the signature glowing neon checkmark (`#9333EA` to `#C084FC`).
+  - Background is 100% transparent with zero bounding rectangle, displaying sharp and vibrant in both light and dark IDE themes.
+- **Transparent Root Extension Icon**:
+  - Processed `icon.png` to remove opaque dark navy (`#191643`) background pixels, ensuring the extension icon renders cleanly on all marketplace and Extension Details surfaces without dark square artifacts.
+- **Real Git Hook Enforcement Testing**:
+  - Verified and integrated end-to-end integration tests for Git pre-commit and pre-push hook execution, confirming that attempts to commit or push active contract violations are strictly blocked.
+
+---
+
 ## [0.4.3] - 2026-10-29
 
 ### Fixed & Hardened (Deep Black-Box Evaluation & Reliability Release)
