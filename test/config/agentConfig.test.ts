@@ -91,7 +91,15 @@ describe("AI agent configuration helpers", () => {
   it("real pre-commit hook execution actually blocks git commit when staged index violates active contract", async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "intent-real-hook-"));
     const cliPath = path.resolve(__dirname, "../../dist/cli.js");
+    const esbuildPath = path.resolve(__dirname, "../../esbuild.mjs");
     try {
+      try {
+        await fs.access(cliPath);
+      } catch {
+        // Compile dist/cli.js if not already built
+        execFileSync("node", [esbuildPath], { stdio: "pipe" });
+      }
+
       execFileSync("git", ["init", "-q", root]);
       execFileSync("git", ["-C", root, "config", "user.name", "Hook Test"]);
       execFileSync("git", ["-C", root, "config", "user.email", "hook@test.local"]);

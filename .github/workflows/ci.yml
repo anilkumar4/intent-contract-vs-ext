@@ -29,8 +29,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Configure Git for test runs
+        run: |
+          git config --global user.name "CI Runner"
+          git config --global user.email "ci@github.local"
+
       - name: Run Typecheck
         run: npm run typecheck
+
+      - name: Compile Extension Bundles
+        run: npm run compile
 
       - name: Run Tests
         run: npm test
