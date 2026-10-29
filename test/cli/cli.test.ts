@@ -208,6 +208,32 @@ describe("headless CLI", () => {
     const commentContent = await fs.readFile(outComment, "utf8");
     expect(commentContent).toContain("Intent Contract CI Report:");
   });
+
+  it("rejects unknown report options and missing option values with exit code 2 (D10)", async () => {
+    const root = await createRepository();
+    expect(await runCli(["start", "test"], root)).toBe(0);
+
+    const stderrChunks: string[] = [];
+    const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => {
+      stderrChunks.push(String(chunk));
+      return true;
+    });
+
+    try {
+      // Unknown option
+      const code1 = await runCli(["report", "--outpt", "wrong.md"], root);
+      expect(code1).toBe(2);
+      expect(stderrChunks.join("")).toContain("Unknown report option: --outpt");
+
+      stderrChunks.length = 0;
+      // Missing value
+      const code2 = await runCli(["report", "--output"], root);
+      expect(code2).toBe(2);
+      expect(stderrChunks.join("")).toContain("--output requires a value");
+    } finally {
+      stderrSpy.mockRestore();
+    }
+  });
 });
 
 async function createRepository(): Promise<string> {

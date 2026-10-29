@@ -153,9 +153,11 @@ async function callTool(root: string, params: Record<string, unknown>): Promise<
       return toolResult({
         healed: true,
         revertedFiles: [],
-        message: "No active violations found. Contract is already compliant.",
-        remainingViolations: 0,
-        findings: []
+        message: verificationBefore.findings.length === 0
+          ? "No active violations found. Contract is already compliant."
+          : `No blocking errors found. Contract is passing with ${verificationBefore.findings.length} warning(s).`,
+        remainingViolations: verificationBefore.findings.length,
+        findings: verificationBefore.findings
       });
     }
     const reverted = await revertOutOfScopeFiles(root);
@@ -185,7 +187,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function workspaceArgument(argv: string[]): string {
+export function workspaceArgument(argv: string[]): string {
   const index = argv.indexOf("--workspace");
   return index >= 0 && argv[index + 1] ? argv[index + 1] : process.cwd();
 }

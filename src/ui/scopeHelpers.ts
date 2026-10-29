@@ -9,6 +9,7 @@ import { updateContractInBaseline } from "../git/snapshot";
 import { policyTreeHash } from "../runtime/contracts";
 import { writeSession, type ContractSession } from "../state/session";
 import { toRepoPath } from "../util/paths";
+import { matchesPatterns } from "../detectors/scope";
 
 interface ScopeContract {
   name?: string;
@@ -111,9 +112,15 @@ export async function addFileToScope(
   if (!parsed.scope) parsed.scope = {};
   if (!Array.isArray(parsed.scope.modify)) parsed.scope.modify = [];
 
-  // If in read_only, remove it
+  // If in read_only, remove exact match or add negative exception if covered by wildcard
   if (Array.isArray(parsed.scope.read_only)) {
     parsed.scope.read_only = parsed.scope.read_only.filter((p) => p !== relative);
+    if (matchesPatterns(relative, parsed.scope.read_only)) {
+      const exclusion = `!${relative}`;
+      if (!parsed.scope.read_only.includes(exclusion)) {
+        parsed.scope.read_only.push(exclusion);
+      }
+    }
   }
 
   if (parsed.scope.modify.includes(relative)) {
@@ -166,6 +173,11 @@ export async function markFileReadOnly(
     parsed.scope.modify = parsed.scope.modify.filter((p) => p !== relative);
   }
 
+  // Remove any exclusion pattern in read_only
+  if (Array.isArray(parsed.scope.read_only)) {
+    parsed.scope.read_only = parsed.scope.read_only.filter((p) => p !== `!${relative}`);
+  }
+
   if (parsed.scope.read_only.includes(relative)) {
     void vscode.window.showInformationMessage(`File "${relative}" is already in scope.read_only.`);
     return;
@@ -203,11 +215,18 @@ export async function addPathPatternToScope(
 
   if (mode === "modify") {
     parsed.scope.read_only = parsed.scope.read_only.filter((p) => p !== pattern);
+    if (matchesPatterns(pattern, parsed.scope.read_only)) {
+      const exclusion = `!${pattern}`;
+      if (!parsed.scope.read_only.includes(exclusion)) {
+        parsed.scope.read_only.push(exclusion);
+      }
+    }
     if (!parsed.scope.modify.includes(pattern)) {
       parsed.scope.modify.push(pattern);
     }
   } else {
     parsed.scope.modify = parsed.scope.modify.filter((p) => p !== pattern);
+    parsed.scope.read_only = parsed.scope.read_only.filter((p) => p !== `!${pattern}`);
     if (!parsed.scope.read_only.includes(pattern)) {
       parsed.scope.read_only.push(pattern);
     }

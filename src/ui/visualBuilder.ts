@@ -23,12 +23,15 @@ export class VisualContractBuilderPanel {
   private readonly panel: vscode.WebviewPanel;
   private disposables: vscode.Disposable[] = [];
   private onStartContract?: (name: string) => Promise<void>;
+  private initialEditorText?: string;
 
   public static async createOrShow(
     extensionUri: vscode.Uri,
     onStartContract?: (name: string) => Promise<void>
   ): Promise<VisualContractBuilderPanel> {
-    const column = vscode.window.activeTextEditor ? vscode.ViewColumn.Beside : vscode.ViewColumn.One;
+    const activeEditor = vscode.window.activeTextEditor;
+    const initialEditorText = activeEditor?.document.getText();
+    const column = activeEditor ? vscode.ViewColumn.Beside : vscode.ViewColumn.One;
 
     if (VisualContractBuilderPanel.currentPanel) {
       VisualContractBuilderPanel.currentPanel.panel.reveal(column);
@@ -46,17 +49,19 @@ export class VisualContractBuilderPanel {
       }
     );
 
-    VisualContractBuilderPanel.currentPanel = new VisualContractBuilderPanel(panel, onStartContract);
+    VisualContractBuilderPanel.currentPanel = new VisualContractBuilderPanel(panel, onStartContract, initialEditorText);
     await VisualContractBuilderPanel.currentPanel.update();
     return VisualContractBuilderPanel.currentPanel;
   }
 
   private constructor(
     panel: vscode.WebviewPanel,
-    onStartContract?: (name: string) => Promise<void>
+    onStartContract?: (name: string) => Promise<void>,
+    initialEditorText?: string
   ) {
     this.panel = panel;
     this.onStartContract = onStartContract;
+    this.initialEditorText = initialEditorText;
 
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
 
@@ -157,9 +162,8 @@ export class VisualContractBuilderPanel {
   }
 
   private extractActiveSymbols(): string[] {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor) return [];
-    const text = editor.document.getText();
+    const text = this.initialEditorText ?? vscode.window.activeTextEditor?.document.getText();
+    if (!text) return [];
     const symbols = new Set<string>();
 
     const fnPattern = /(?:function\s+([a-zA-Z_$][a-zA-Z0-9_$]*)|const\s+([a-zA-Z_$][a-zA-Z0-9_$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>|class\s+([a-zA-Z_$][a-zA-Z0-9_$]*)|(?:public|private|protected|async|\s)*([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\([^)]*\)\s*[{:])/g;
@@ -188,7 +192,8 @@ export class VisualContractBuilderPanel {
 
     void vscode.window.showInformationMessage(`Saved contract "${contract.name}". Starting session...`);
     if (this.onStartContract) {
-      await this.onStartContract(contract.name);
+      const sanitizedName = path.basename(filePath, path.extname(filePath));
+      await this.onStartContract(sanitizedName);
     }
     this.panel.dispose();
   }
@@ -241,6 +246,21 @@ export class VisualContractBuilderPanel {
 
     const fileName = `${contract.name.toLowerCase().replace(/[^a-z0-9_-]/g, "-")}.yaml`;
     const filePath = path.join(intentDir, fileName);
+
+    try {
+      await fs.access(filePath);
+      const answer = await vscode.window.showWarningMessage(
+        `Contract template "${fileName}" already exists in .intent/. Do you want to overwrite it?`,
+        { modal: true },
+        "Overwrite",
+        "Cancel"
+      );
+      if (answer !== "Overwrite") {
+        return undefined;
+      }
+    } catch {
+      // File does not exist, proceed
+    }
 
     const yamlStr = YAML.stringify(contract, { indent: 2 });
     await fs.writeFile(filePath, yamlStr, "utf8");

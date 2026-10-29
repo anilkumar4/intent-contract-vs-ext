@@ -11,7 +11,12 @@ export interface ContractSession extends BaselineSnapshot {
 export async function readSession(root: string): Promise<ContractSession | undefined> {
   try {
     const raw = await fs.readFile(sessionPath(root), "utf8");
-    const parsed: unknown = JSON.parse(raw);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (parseError) {
+      throw new Error(`Session state corrupt (.intent/.state.json): ${parseError instanceof Error ? parseError.message : String(parseError)}. Run stop and start to reset.`);
+    }
     if (!isContractSession(parsed)) return undefined;
     return parsed;
   } catch (error) {
@@ -23,7 +28,10 @@ export async function readSession(root: string): Promise<ContractSession | undef
 export async function writeSession(root: string, session: ContractSession): Promise<void> {
   const directory = path.join(root, ".intent");
   await fs.mkdir(directory, { recursive: true });
-  await fs.writeFile(sessionPath(root), `${JSON.stringify(session, null, 2)}\n`, "utf8");
+  const finalPath = sessionPath(root);
+  const tmpPath = `${finalPath}.${process.pid}.${Date.now()}.tmp`;
+  await fs.writeFile(tmpPath, `${JSON.stringify(session, null, 2)}\n`, "utf8");
+  await fs.rename(tmpPath, finalPath);
 }
 
 export async function removeSession(root: string): Promise<void> {

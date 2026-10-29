@@ -75,7 +75,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     root,
     session,
     contract,
-    findings
+    findings,
+    waivers
   }));
   context.subscriptions.push(
     codeLensProvider,
@@ -186,21 +187,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const repoRoot = root ?? await workspaceRepositoryRoot();
       if (!repoRoot) return;
       await addSymbolToScope(repoRoot, () => session, async () => {
-        await runCheck();
+        await reloadActiveContractAndSync(repoRoot);
       }, typeof symbolArg === "string" ? symbolArg : undefined);
     }),
     vscode.commands.registerCommand("intentContract.addFileToScope", async (uriArg?: vscode.Uri) => {
       const repoRoot = root ?? await workspaceRepositoryRoot();
       if (!repoRoot) return;
       await addFileToScope(repoRoot, () => session, async () => {
-        await runCheck();
+        await reloadActiveContractAndSync(repoRoot);
       }, uriArg instanceof vscode.Uri ? uriArg : undefined);
     }),
     vscode.commands.registerCommand("intentContract.markFileReadOnly", async (uriArg?: vscode.Uri) => {
       const repoRoot = root ?? await workspaceRepositoryRoot();
       if (!repoRoot) return;
       await markFileReadOnly(repoRoot, () => session, async () => {
-        await runCheck();
+        await reloadActiveContractAndSync(repoRoot);
       }, uriArg instanceof vscode.Uri ? uriArg : undefined);
     }),
     vscode.commands.registerCommand("intentContract.revertFile", async (value?: unknown) => revertFindingFile(unwrapFinding(value) ?? await chooseCurrentFinding(), actionContext)),
@@ -211,13 +212,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         return;
       }
       try {
+        const allWaivers = await readWaiversForContract(root, contract.allow_exceptions, true);
         const reportPath = await generateComplianceReport({
           root,
           session,
           contract,
           changes,
           findings,
-          waivers
+          waivers: allWaivers
         });
         const uri = vscode.Uri.file(reportPath);
         try {
@@ -469,7 +471,11 @@ async function startContractByName(name: string): Promise<void> {
     return;
   }
   const files = await discoverContracts(repoRoot);
-  const matched = files.find((f) => path.basename(f, path.extname(f)).toLowerCase() === name.toLowerCase()) ?? files[0];
+  const sanitized = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+  const matched = files.find((f) => {
+    const base = path.basename(f, path.extname(f)).toLowerCase();
+    return base === name.toLowerCase() || base === sanitized;
+  });
   if (!matched) {
     void vscode.window.showErrorMessage(`Contract "${name}" was not found in .intent/.`);
     return;
@@ -496,6 +502,17 @@ async function startContractByName(name: string): Promise<void> {
   contract = await loadContractFromBaseline(repoRoot, session);
   await writeSession(repoRoot, session);
   void vscode.window.showInformationMessage(`Started contract "${selectedContract.name}" from the current working tree.`);
+  await runCheck();
+  codeLensProvider?.refresh();
+}
+
+async function reloadActiveContractAndSync(repoRoot: string): Promise<void> {
+  const savedSession = await readSession(repoRoot);
+  if (savedSession) {
+    session = await ensurePolicyBaselineRef(repoRoot, savedSession);
+    contract = await loadContractFromBaseline(repoRoot, session);
+    await syncActiveContractToAgents(repoRoot, contract);
+  }
   await runCheck();
   codeLensProvider?.refresh();
 }
@@ -635,15 +652,35 @@ async function performCheck(): Promise<void> {
     const currentTreeHash = await createWorkingTreeSnapshot(root, contract.scope.read_only);
     const diff = await diffTrees(root, activePolicyTree, currentTreeHash);
     const nextFindings = await detectFindingsForWorkspace(root, activePolicyTree, diff, contract, session.activeContract);
+    const config = vscode.workspace.getConfiguration("intentContract");
+    const userIgnored = config.get<string[]>("ignoredPaths", []);
+    const severityOverrides = config.get<Record<string, "error" | "warning">>("severityOverrides", {});
+    let filteredFindings = nextFindings;
+    if (userIgnored && userIgnored.length > 0) {
+      filteredFindings = filteredFindings.filter((f) => {
+        return !userIgnored.some((pattern) =>
+          picomatch.isMatch(f.file.replace(/\\/g, "/"), pattern.replace(/\\/g, "/"), { dot: true })
+        );
+      });
+    }
+    if (severityOverrides && Object.keys(severityOverrides).length > 0) {
+      for (const finding of filteredFindings) {
+        const ruleOverride = finding.rule ? severityOverrides[finding.rule] : undefined;
+        const override = ruleOverride ?? severityOverrides[finding.detector];
+        if (override === "error" || override === "warning") {
+          finding.severity = override;
+        }
+      }
+    }
     const nextWaivers = await readWaiversForContract(root, contract.allow_exceptions);
-    const active = nextFindings.filter((finding) => !nextWaivers.has(finding.id));
+    const active = filteredFindings.filter((finding) => !nextWaivers.has(finding.id));
     changes = diff.changes;
-    findings = nextFindings;
+    findings = filteredFindings;
     waivers = nextWaivers;
     diagnostics.update(root, active);
-    treeProvider.setState(true, nextFindings, nextWaivers);
+    treeProvider.setState(true, filteredFindings, nextWaivers);
     statusBar.update(contract.name, active);
-    await writeViolationSummary(root, nextFindings, nextWaivers);
+    await writeViolationSummary(root, filteredFindings, nextWaivers);
 
     if (contract.architecture && contract.forbid.includes("architecture_drift")) {
       try {

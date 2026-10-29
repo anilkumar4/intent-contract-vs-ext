@@ -156,35 +156,92 @@ export async function startIntentContract(
     throw new Error("More than one contract matches \"" + name + "\". Use a unique contract name or filename.");
   }
 
-  const previous = await readSession(root);
-  if (previous && !options.force) {
-    throw new Error("An Intent Contract session is already active. Use --force to replace its baseline, or stop it first.");
-  }
-  await ensureIntentMetadataIgnored(root);
-  const relative = toRepoPath(path.relative(root, candidates[0].file));
-  const snapshot = await captureBaseline(root, candidates[0].contract.scope.read_only);
-  const session: ContractSession = {
-    ...snapshot,
-    activeContract: relative,
-    originalBaselineTreeHash: snapshot.baselineTreeHash
-  };
-  try {
-    await writeSession(root, session);
-  } catch (error) {
-    await releaseBaseline(root, snapshot.baselineRef);
-    throw error;
-  }
-  if (previous) await releaseSessionBaselineRefs(root, previous);
-  await unlinkIfPresent(path.join(root, ".intent", ".violations.md"));
-  const baselineYaml = (await gitBuffer(root, ["cat-file", "blob", snapshot.baselineTreeHash + ":" + relative])).toString("utf8");
-  return { path: relative, yaml: baselineYaml, contract: parseContract(baselineYaml, relative), session };
+  return withRepoLock(root, async () => {
+    const previous = await readSession(root);
+    if (previous && !options.force) {
+      throw new Error("An Intent Contract session is already active. Use --force to replace its baseline, or stop it first.");
+    }
+    await ensureIntentMetadataIgnored(root);
+    const relative = toRepoPath(path.relative(root, candidates[0].file));
+    const snapshot = await captureBaseline(root, candidates[0].contract.scope.read_only);
+    const session: ContractSession = {
+      ...snapshot,
+      activeContract: relative,
+      originalBaselineTreeHash: snapshot.baselineTreeHash
+    };
+    try {
+      await writeSession(root, session);
+    } catch (error) {
+      await releaseBaseline(root, snapshot.baselineRef);
+      throw error;
+    }
+    if (previous) await releaseSessionBaselineRefs(root, previous);
+    await pruneOrphanBaselineRefs(root, new Set([session.baselineRef, session.originalBaselineRef].filter(Boolean) as string[]));
+    await unlinkIfPresent(path.join(root, ".intent", ".violations.md"));
+    const baselineYaml = (await gitBuffer(root, ["cat-file", "blob", snapshot.baselineTreeHash + ":" + relative])).toString("utf8");
+    return { path: relative, yaml: baselineYaml, contract: parseContract(baselineYaml, relative), session };
+  });
 }
 
 export async function stopIntentContract(root: string): Promise<void> {
-  const session = await readSession(root);
-  if (session) await releaseSessionBaselineRefs(root, session);
-  await removeSession(root);
-  await unlinkIfPresent(path.join(root, ".intent", ".violations.md"));
+  return withRepoLock(root, async () => {
+    const session = await readSession(root);
+    if (session) await releaseSessionBaselineRefs(root, session);
+    await removeSession(root);
+    await pruneOrphanBaselineRefs(root, new Set());
+    await unlinkIfPresent(path.join(root, ".intent", ".violations.md"));
+  });
+}
+
+async function withRepoLock<T>(root: string, fn: () => Promise<T>): Promise<T> {
+  const lockDir = path.join(root, ".git");
+  await fs.mkdir(lockDir, { recursive: true });
+  const lockFile = path.join(lockDir, "intent-contract.lock");
+  const maxAttempts = 60;
+  let handle: fs.FileHandle | undefined;
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      handle = await fs.open(lockFile, "wx");
+      break;
+    } catch (err: unknown) {
+      if (typeof err === "object" && err !== null && "code" in err && (err as { code: string }).code === "EEXIST") {
+        try {
+          const stat = await fs.stat(lockFile);
+          if (Date.now() - stat.mtimeMs > 10000) {
+            await fs.unlink(lockFile).catch(() => {});
+          }
+        } catch {}
+        await new Promise((r) => setTimeout(r, 50));
+        continue;
+      }
+      throw err;
+    }
+  }
+  if (!handle) {
+    throw new Error("Could not acquire lock on .git/intent-contract.lock (timed out)");
+  }
+  try {
+    return await fn();
+  } finally {
+    try {
+      await handle.close();
+      await fs.unlink(lockFile);
+    } catch {}
+  }
+}
+
+async function pruneOrphanBaselineRefs(root: string, activeRefs: Set<string>): Promise<void> {
+  try {
+    const raw = await gitText(root, ["for-each-ref", "--format=%(refname)", "refs/intent-contract/baselines/"]);
+    const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
+    for (const ref of lines) {
+      if (!activeRefs.has(ref)) {
+        await gitText(root, ["update-ref", "-d", ref]).catch(() => {});
+      }
+    }
+  } catch {
+    // Ignore if git command fails
+  }
 }
 
 export async function revertOutOfScopeFiles(root: string, files?: string[]): Promise<string[]> {

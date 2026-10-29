@@ -29,7 +29,7 @@ export class IntentContractCodeActionProvider implements vscode.CodeActionProvid
 
     const relative = toRepoPath(path.relative(root, document.uri.fsPath));
     const intentDiagnostics = context.diagnostics.filter(
-      (diag) => diag.source === "intent-contract"
+      (diag) => diag.source === "Intent Contract" || diag.source === "intent-contract"
     );
 
     if (intentDiagnostics.length === 0) return [];

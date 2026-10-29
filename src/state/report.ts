@@ -2,8 +2,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import type { Contract, FileChange, Finding } from "../detectors/types";
 import type { ContractSession } from "./session";
-import type { Waiver } from "./waivers";
+import { isWaiverActive, type Waiver } from "./waivers";
 import { policyTreeHash } from "../runtime/contracts";
+import { matchesPatterns } from "../detectors/scope";
 
 export interface ReportContext {
   root: string;
@@ -46,7 +47,10 @@ export function generateBadgeSvg(passed: boolean): string {
 }
 
 export function generatePrCommentMarkdown(ctx: ReportContext): string {
-  const activeFindings = ctx.findings.filter((f) => !ctx.waivers.has(f.id));
+  const activeFindings = ctx.findings.filter((f) => {
+    const w = ctx.waivers.get(f.id);
+    return !w || !isWaiverActive(w);
+  });
   const activeErrors = activeFindings.filter((f) => f.severity === "error");
   const isCompliant = activeErrors.length === 0;
 
@@ -78,7 +82,10 @@ export async function generateComplianceReport(ctx: ReportContext, options?: Rep
   const fileDate = timestamp.replace(/[:.]/g, "-");
   const reportPath = path.join(reportsDir, `compliance-report-${fileDate}.md`);
 
-  const activeFindings = ctx.findings.filter((f) => !ctx.waivers.has(f.id));
+  const activeFindings = ctx.findings.filter((f) => {
+    const w = ctx.waivers.get(f.id);
+    return !w || !isWaiverActive(w);
+  });
   const activeErrors = activeFindings.filter((f) => f.severity === "error");
   const activeWarnings = activeFindings.filter((f) => f.severity === "warning");
 
@@ -96,6 +103,39 @@ export async function generateComplianceReport(ctx: ReportContext, options?: Rep
   const durationStr = ctx.session.startedAt
     ? formatDuration(new Date(ctx.session.startedAt), new Date())
     : "Unknown";
+
+  // Dimension evaluations (D5)
+  const symbolChecksConfigured = Boolean(ctx.contract.scope.modify_symbols && ctx.contract.scope.modify_symbols.length > 0);
+  const symbolStatus = !symbolChecksConfigured ? "⚪ Not Configured" : (symbolViolations.length === 0 ? "✅ PASS" : "❌ FAIL");
+  const symbolOutcome = !symbolChecksConfigured
+    ? "No symbol boundaries specified (file-level scope active)"
+    : (symbolViolations.length === 0 ? "All modified functions and symbols match approved symbol scope" : `${symbolViolations.length} unapproved symbol modification(s)`);
+
+  const forbidList = ctx.contract.forbid as string[];
+  const testChecksEnabled = forbidList.includes("test_weakening") || forbidList.includes("tautological_tests");
+  const testStatus = !testChecksEnabled ? "⚪ Not Evaluated" : (testViolations.length === 0 ? "✅ PASS" : "❌ FAIL");
+  const testOutcome = !testChecksEnabled
+    ? "Test weakening checks disabled in contract forbid list"
+    : (testViolations.length === 0 ? "Zero assertion deletions, matcher downgrades, or skipped tests" : `${testViolations.length} test weakening attempt(s) detected`);
+
+  const depChecksEnabled = forbidList.includes("dependencies") || forbidList.includes("new_dependencies");
+  const depStatus = !depChecksEnabled ? "⚪ Not Evaluated" : (depViolations.length === 0 ? "✅ PASS" : "❌ FAIL");
+  const depOutcome = !depChecksEnabled
+    ? "Dependency checks disabled in contract forbid list"
+    : (depViolations.length === 0 ? "Zero unvetted package manifests or malicious scripts added" : `${depViolations.length} dependency risk(s) flagged`);
+
+  let archStatus: string;
+  let archOutcome: string;
+  if (!ctx.contract.architecture?.diagram) {
+    archStatus = "⚪ Not Configured";
+    archOutcome = "Architecture diagram not configured for this contract";
+  } else if (!ctx.contract.forbid.includes("architecture_drift")) {
+    archStatus = "⚪ Not Evaluated";
+    archOutcome = "Architecture drift check disabled in contract forbid list";
+  } else {
+    archStatus = archViolations.length === 0 ? "✅ PASS" : "❌ FAIL";
+    archOutcome = archViolations.length === 0 ? "Zero unauthorized cross-module imports detected against policy diagram" : `${archViolations.length} architectural boundary breach(es)`;
+  }
 
   const markdown = `# 🛡️ Intent Contract AI Safety & Compliance Certificate
 
@@ -124,10 +164,10 @@ export async function generateComplianceReport(ctx: ReportContext, options?: Rep
 | Safety Dimension | Status | Evaluated Outcome |
 |---|:---:|---|
 | **File Scope Integrity** | ${scopeViolations.length === 0 ? "✅ PASS" : "❌ FAIL"} | ${scopeViolations.length === 0 ? `All ${ctx.changes.length} changed file(s) confined to permitted \`scope.modify\`` : `${scopeViolations.length} unauthorized file modification(s)`} |
-| **AST Symbol Scope** | ${symbolViolations.length === 0 ? "✅ PASS" : "❌ FAIL"} | ${symbolViolations.length === 0 ? "All modified functions and symbols match approved symbol scope" : `${symbolViolations.length} unapproved symbol modification(s)`} |
-| **Test Fidelity (Anti-Weakening)** | ${testViolations.length === 0 ? "✅ PASS" : "❌ FAIL"} | ${testViolations.length === 0 ? "Zero assertion deletions, matcher downgrades, or skipped tests" : `${testViolations.length} test weakening attempt(s) detected`} |
-| **Supply-Chain Security** | ${depViolations.length === 0 ? "✅ PASS" : "❌ FAIL"} | ${depViolations.length === 0 ? "Zero unvetted package manifests or malicious scripts added" : `${depViolations.length} dependency risk(s) flagged`} |
-| **Architectural Boundaries** | ${archViolations.length === 0 ? "✅ PASS" : "❌ FAIL"} | ${archViolations.length === 0 ? "Zero unauthorized cross-module imports detected against policy diagram" : `${archViolations.length} architectural boundary breach(es)`} |
+| **AST Symbol Scope** | ${symbolStatus} | ${symbolOutcome} |
+| **Test Fidelity (Anti-Weakening)** | ${testStatus} | ${testOutcome} |
+| **Supply-Chain Security** | ${depStatus} | ${depOutcome} |
+| **Architectural Boundaries** | ${archStatus} | ${archOutcome} |
 
 ---
 
@@ -141,7 +181,19 @@ ${ctx.changes.map((change) => {
   const fileFindings = activeFindings.filter((f) => f.file === file);
   const statusIcon = change.status === "A" ? "🟢 Added" : change.status === "D" ? "🔴 Deleted" : "🟡 Modified";
   const findingsBadge = fileFindings.length === 0 ? "✅ Clean" : `⚠️ ${fileFindings.length} Finding(s)`;
-  return `| ${statusIcon} | \`${file}\` | In-Scope | ${findingsBadge} |`;
+  const isReadOnlyViolation = scopeViolations.some((f) => f.file === file && f.rule === "read_only");
+  const isOutsideModifyViolation = scopeViolations.some((f) => f.file === file && f.rule === "outside_modify");
+  let scopeStatus = "🛡️ In-Scope";
+  if (isReadOnlyViolation) {
+    scopeStatus = "🔒 Read-Only";
+  } else if (isOutsideModifyViolation) {
+    scopeStatus = "⚠️ Out of Scope";
+  } else if (matchesPatterns(file, ctx.contract.scope.read_only)) {
+    scopeStatus = "🔒 Read-Only";
+  } else if (!matchesPatterns(file, ctx.contract.scope.modify)) {
+    scopeStatus = "⚠️ Out of Scope";
+  }
+  return `| ${statusIcon} | \`${file}\` | ${scopeStatus} | ${findingsBadge} |`;
 }).join("\n")}
 `}
 

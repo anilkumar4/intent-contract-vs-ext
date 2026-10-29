@@ -5,12 +5,14 @@ import type { ContractSession } from "../state/session";
 import type { Finding } from "../detectors/types";
 import { matchesPatterns } from "../detectors/scope";
 import { toRepoPath } from "../util/paths";
+import { isWaiverActive, type Waiver } from "../state/waivers";
 
 export interface CodeLensContext {
   root: string | undefined;
   session: ContractSession | undefined;
   contract: Contract | undefined;
   findings: Finding[];
+  waivers?: Map<string, Waiver>;
 }
 
 export class IntentContractCodeLensProvider implements vscode.CodeLensProvider {
@@ -57,7 +59,9 @@ export class IntentContractCodeLensProvider implements vscode.CodeLensProvider {
 
     const range = new vscode.Range(0, 0, 0, 0);
     const lenses: vscode.CodeLens[] = [];
-    const activeFindings = ctx.findings.filter((f) => f.file === relative);
+    const activeFindings = ctx.findings.filter(
+      (f) => f.file === relative && (!ctx.waivers || !ctx.waivers.has(f.id) || !isWaiverActive(ctx.waivers.get(f.id)!))
+    );
 
     const isReadOnly = matchesPatterns(relative, ctx.contract.scope.read_only);
     const isModify = matchesPatterns(relative, ctx.contract.scope.modify);

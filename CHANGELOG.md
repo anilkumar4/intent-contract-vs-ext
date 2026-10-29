@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.3] - 2026-10-29
+
+### Fixed & Hardened (Deep Black-Box Evaluation & Reliability Release)
+- **D1 (Quick Fix Source Alignment)**:
+  - Updated `IntentContractCodeActionProvider` to match diagnostics with source `Intent Contract` as well as `intent-contract`, restoring Quick Fix code actions (`Ctrl+.`) on all emitted contract diagnostics.
+- **D2 & D9 (Live Policy Refresh & Dynamic Prompt Sync)**:
+  - Centralized `reloadActiveContractAndSync` in `src/extension.ts` and `src/ui/scopeHelpers.ts`. Authorized scope edits now refresh the in-memory policy baseline immediately and re-sync AI agent prompt files so agents operate under identical current boundaries.
+- **D3 (Verification Settings Implementation)**:
+  - Wired `intentContract.ignoredPaths` and `intentContract.severityOverrides` directly into workspace check verification, ensuring manual and automated checks respect custom ignored patterns and rule severity overrides.
+- **D4 (Accurate Audit Ledger Scope Column)**:
+  - Refactored Section 3 modified files ledger in `src/state/report.ts` to compute actual scope status (`🛡️ In-Scope`, `⚠️ Out of Scope`, `🔒 Read-Only`) based on findings and contract policy rather than hardcoding `In-Scope`.
+- **D5 (Truthful Scorecard Certification)**:
+  - Optional and unconfigured detectors (e.g. architecture drift without a diagram, disabled test weakening or dependencies in `forbid`) are now certified as `⚪ Not Configured` or `⚪ Not Evaluated` instead of falsely claiming `✅ PASS`.
+- **D6 (Audit Waiver History & Expired TTL Separation)**:
+  - Passed complete waiver history to compliance reports so historical/expired waivers appear in Section 5 audit tables while strictly suppressing findings only for active (non-expired) waivers.
+- **D7 (MCP Self-Heal Warning Retention)**:
+  - Corrected MCP `self_heal_contract` to return warning findings and accurate violation counts when a changeset passes without errors but retains out-of-scope warnings.
+- **D8 (Wildcard Read-Only Exception Support)**:
+  - Enhanced scope helpers (`addFileToScope`, `markFileReadOnly`, `addPathPatternToScope`) to add negative exclusion patterns (`!path`) when modifying paths covered by wildcard read-only rules (e.g., `src/shared/**`).
+- **D10 (Strict CLI Report Option Parsing)**:
+  - Added strict `parseReportOptions` in `src/cli/index.ts`, rejecting misspelled flags (e.g., `--outpt`) and missing values with actionable stderr errors and exit code 2.
+- **D11 (CodeLens Active Waiver Filtering)**:
+  - Passed waivers into `IntentContractCodeLensProvider`, filtering out waived findings so active warning counts reflect true suppressed state.
+- **D12 (Visual Builder Overwrite Protection)**:
+  - Added modal confirmation in Visual Contract Builder before overwriting existing `.intent/<contract>.yaml` template files, preventing accidental data loss.
+- **D13 (Visual Builder Active Editor Symbol Pre-Capture)**:
+  - Pre-captured active editor text and symbol tokens before focusing webview panels, eliminating race conditions in symbol suggestions.
+- **D14 (MCP Launcher Execution Hardening)**:
+  - Updated generated stable MCP launchers to execute exported `runMcpServer` runners directly or spawn Node processes with inherited stdio, ensuring tools and JSON-RPC initialize correctly across relocations and extension updates.
+- **D15 (Visual Builder Name Sanitization & Safe Activation)**:
+  - Sanitized contract identifiers passed to session starter callbacks and eliminated fallback to unrelated contracts when an explicit contract name is requested.
+- **D16 (Atomic Session State & Concurrency Lock)**:
+  - Replaced non-atomic `.state.json` writes with temp-file write and atomic rename, added `.git/intent-contract.lock` serializing concurrent `start`/`stop` calls, and pruned orphaned baseline refs on stop.
+- **D17 (Windows Transient Lock Retries & Safe Cleanup)**:
+  - Added retry logic with exponential backoff for transient Windows file locks (`EBUSY`, `EPERM`, `Permission denied`) during Git operations, and hardened temp directory cleanup in finally blocks to never alter check verdicts.
+
+---
+
 ## [0.4.2] - 2026-10-28
 
 ### Fixed

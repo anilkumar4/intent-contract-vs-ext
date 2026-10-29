@@ -127,4 +127,89 @@ describe("Session compliance report generator", () => {
       await fs.rm(root, { recursive: true, force: true });
     }
   });
+
+  it("distinguishes unconfigured/disabled detectors and displays accurate file scope status in ledger (D4, D5, D6)", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "intent-report-d4-d5-d6-"));
+    try {
+      const minimalContract: Contract = {
+        name: "minimal",
+        intent: "Only file scope without architecture or forbidden extras",
+        scope: {
+          modify: ["src/feature/**"],
+          read_only: ["src/config/**"],
+          modify_symbols: []
+        },
+        forbid: [],
+        allow_exceptions: true
+      };
+
+      const changes: FileChange[] = [
+        { file: "src/feature/app.ts", status: "M", additions: [], deletions: [], binary: false, beforeContent: "", afterContent: "" },
+        { file: "README.md", status: "M", additions: [], deletions: [], binary: false, beforeContent: "", afterContent: "" },
+        { file: "src/config/secrets.ts", status: "M", additions: [], deletions: [], binary: false, beforeContent: "", afterContent: "" }
+      ];
+
+      const findings: Finding[] = [
+        {
+          id: "out-scope-1",
+          detector: "scope",
+          rule: "outside_modify",
+          severity: "warning",
+          file: "README.md",
+          message: "File is outside the permitted modify scope",
+          evidence: "diff hunk",
+          remediation: "Add to scope.modify or revert"
+        },
+        {
+          id: "read-only-1",
+          detector: "scope",
+          rule: "read_only",
+          severity: "error",
+          file: "src/config/secrets.ts",
+          message: "File is declared read-only by the contract",
+          evidence: "diff hunk",
+          remediation: "Restore to baseline"
+        }
+      ];
+
+      // Waiver that expired in the past
+      const waivers = new Map([
+        ["out-scope-1", {
+          id: "out-scope-1",
+          reason: "Temporary doc edit",
+          timestamp: new Date(Date.now() - 7200000).toISOString(),
+          expires_at: new Date(Date.now() - 3600000).toISOString()
+        }]
+      ]);
+
+      const reportPath = await generateComplianceReport({
+        root,
+        session: sampleSession,
+        contract: minimalContract,
+        changes,
+        findings,
+        waivers
+      });
+
+      const content = await fs.readFile(reportPath, "utf8");
+
+      // D5: Unconfigured/disabled detectors must not be certified as PASS
+      expect(content).toContain("| **Architectural Boundaries** | ⚪ Not Configured |");
+      expect(content).toContain("| **Supply-Chain Security** | ⚪ Not Evaluated |");
+      expect(content).toContain("| **Test Fidelity (Anti-Weakening)** | ⚪ Not Evaluated |");
+      expect(content).toContain("| **AST Symbol Scope** | ⚪ Not Configured |");
+
+      // D4: Ledger correctly identifies scope status per file
+      expect(content).toContain("| `src/feature/app.ts` | 🛡️ In-Scope |");
+      expect(content).toContain("| `README.md` | ⚠️ Out of Scope |");
+      expect(content).toContain("| `src/config/secrets.ts` | 🔒 Read-Only |");
+
+      // D6: Expired waiver is listed in Section 5 audit history, and finding remains active
+      expect(content).toContain("Expired");
+      expect(content).toContain("Temporary doc edit");
+      expect(content).toContain("out-scope-1");
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
 });

@@ -18,9 +18,37 @@ const indexPathCache = new Map<string, string>();
 async function getIndexPath(root: string): Promise<string> {
   const cached = indexPathCache.get(root);
   if (cached) return cached;
-  const resolved = (await gitText(root, ["rev-parse", "--path-format=absolute", "--git-path", "index"])).trim();
+  const resolved = (await retryGitText(root, ["rev-parse", "--path-format=absolute", "--git-path", "index"])).trim();
   indexPathCache.set(root, resolved);
   return resolved;
+}
+
+async function safeRemoveTempDir(dir: string): Promise<void> {
+  try {
+    await fs.rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  } catch {
+    // Swallow cleanup error on Windows so temporary directory housekeeping can never change a check verdict
+  }
+}
+
+async function retryGitText(root: string, args: string[], env?: Record<string, string>): Promise<string> {
+  const maxAttempts = 5;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await gitText(root, args, env);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        attempt < maxAttempts &&
+        (msg.includes("EBUSY") || msg.includes("Permission denied") || msg.includes("EPERM") || msg.includes("locked"))
+      ) {
+        await new Promise((r) => setTimeout(r, 100 * attempt));
+        continue;
+      }
+      throw err;
+    }
+  }
+  return gitText(root, args, env);
 }
 
 export async function createWorkingTreeSnapshot(root: string, readOnlyPatterns: string[] = []): Promise<string> {
@@ -33,14 +61,14 @@ export async function createWorkingTreeSnapshot(root: string, readOnlyPatterns: 
     } catch (error) {
       if (!isMissing(error)) throw error;
       const env = { GIT_INDEX_FILE: temporaryIndexPath };
-      await gitText(root, ["read-tree", "--empty"], env);
+      await retryGitText(root, ["read-tree", "--empty"], env);
     }
     const env = { GIT_INDEX_FILE: temporaryIndexPath };
-    await gitText(root, ["add", "-A", "--", "."], env);
+    await retryGitText(root, ["add", "-A", "--", "."], env);
 
     // Include ignored files covered by policy so changes to those paths remain visible.
     try {
-      const ignoredRaw = await gitText(root, [
+      const ignoredRaw = await retryGitText(root, [
         "status", "--porcelain=v1", "-z", "-uall", "--ignored", "--",
         ":(exclude)node_modules",
         ":(exclude).vscode-test",
@@ -65,16 +93,16 @@ export async function createWorkingTreeSnapshot(root: string, readOnlyPatterns: 
         }
       }
       if (ignoredFiles.length > 0) {
-        await gitText(root, ["add", "-f", "--", ...ignoredFiles], env);
+        await retryGitText(root, ["add", "-f", "--", ...ignoredFiles], env);
       }
     } catch {
       // Continue even if ignored file status fails
     }
 
-    await gitText(root, ["rm", "--cached", "--ignore-unmatch", "--", ".intent/.state.json", ".intent/.violations.md", ".intent/waivers.json"], env);
-    return (await gitText(root, ["write-tree"], env)).trim();
+    await retryGitText(root, ["rm", "--cached", "--ignore-unmatch", "--", ".intent/.state.json", ".intent/.violations.md", ".intent/waivers.json"], env);
+    return (await retryGitText(root, ["write-tree"], env)).trim();
   } finally {
-    await fs.rm(temporaryDirectory, { recursive: true, force: true });
+    await safeRemoveTempDir(temporaryDirectory);
   }
 }
 
@@ -122,14 +150,14 @@ export async function materializeTree(root: string, treeHash: string): Promise<{
   const checkoutRoot = path.join(temporaryDirectory, "checkout");
   const env = { GIT_INDEX_FILE: indexPath };
   try {
-    await gitText(root, ["read-tree", treeHash], env);
+    await retryGitText(root, ["read-tree", treeHash], env);
     await fs.mkdir(checkoutRoot, { recursive: true });
-    await gitText(root, ["checkout-index", "--all", "--force", `--prefix=${checkoutRoot}${path.sep}`], env);
+    await retryGitText(root, ["checkout-index", "--all", "--force", `--prefix=${checkoutRoot}${path.sep}`], env);
   } catch (error) {
-    await fs.rm(temporaryDirectory, { recursive: true, force: true });
+    await safeRemoveTempDir(temporaryDirectory);
     throw error;
   }
-  return { root: checkoutRoot, dispose: () => fs.rm(temporaryDirectory, { recursive: true, force: true }) };
+  return { root: checkoutRoot, dispose: () => safeRemoveTempDir(temporaryDirectory) };
 }
 
 async function applyCandidatePaths(
@@ -142,19 +170,19 @@ async function applyCandidatePaths(
   const indexPath = path.join(temporaryDirectory, "index");
   const env = { GIT_INDEX_FILE: indexPath };
   try {
-    await gitText(root, ["read-tree", baseTree], env);
+    await retryGitText(root, ["read-tree", baseTree], env);
     const paths = [...new Set(rawPaths.split("\0").filter(Boolean))];
     for (const file of paths) {
       const entry = await readEntry(file);
       if (!entry) {
-        await gitText(root, ["update-index", "--force-remove", "--", file], env);
+        await retryGitText(root, ["update-index", "--force-remove", "--", file], env);
       } else {
-        await gitText(root, ["update-index", "--add", "--cacheinfo", entry.mode, entry.objectId, file], env);
+        await retryGitText(root, ["update-index", "--add", "--cacheinfo", entry.mode, entry.objectId, file], env);
       }
     }
-    return (await gitText(root, ["write-tree"], env)).trim();
+    return (await retryGitText(root, ["write-tree"], env)).trim();
   } finally {
-    await fs.rm(temporaryDirectory, { recursive: true, force: true });
+    await safeRemoveTempDir(temporaryDirectory);
   }
 }
 

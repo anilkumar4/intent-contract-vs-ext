@@ -77,21 +77,11 @@ export async function runCli(argv: string[], workingDirectory = process.cwd()): 
       return result.passed ? 0 : 1;
     }
     if (command === "report") {
-      let outputPath: string | undefined;
-      const outputIndex = filtered.indexOf("--output");
-      if (outputIndex >= 0 && filtered[outputIndex + 1]) {
-        outputPath = path.resolve(workspace, filtered[outputIndex + 1]);
-      }
-      let badgePath: string | undefined;
-      const badgeIndex = filtered.indexOf("--badge");
-      if (badgeIndex >= 0 && filtered[badgeIndex + 1]) {
-        badgePath = path.resolve(workspace, filtered[badgeIndex + 1]);
-      }
-      let prCommentPath: string | undefined;
-      const prIndex = filtered.indexOf("--pr-comment");
-      if (prIndex >= 0 && filtered[prIndex + 1]) {
-        prCommentPath = path.resolve(workspace, filtered[prIndex + 1]);
-      }
+      const options = parseReportOptions(filtered.slice(1));
+      const outputPath = options.output ? path.resolve(workspace, options.output) : undefined;
+      const badgePath = options.badge ? path.resolve(workspace, options.badge) : undefined;
+      const prCommentPath = options.prComment ? path.resolve(workspace, options.prComment) : undefined;
+
       const existing = await readSession(root);
       if (!existing) {
         throw new Error("No active Intent Contract session was found. Start a contract session before exporting a report.");
@@ -102,7 +92,7 @@ export async function runCli(argv: string[], workingDirectory = process.cwd()): 
       const currentTree = await createWorkingTreeSnapshot(root, summary.contract.scope.read_only);
       const diff = await diffTrees(root, policyTree, currentTree);
       const allFindings = await detectFindingsForWorkspace(root, policyTree, diff, summary.contract, summary.path);
-      const waivers = await readWaiversForContract(root, summary.contract.allow_exceptions);
+      const waivers = await readWaiversForContract(root, summary.contract.allow_exceptions, true);
 
       const generatedPath = await generateComplianceReport({
         root,
@@ -197,6 +187,32 @@ function parseCheckOptions(args: string[]): CheckOptions {
     } else throw new Error("Unknown check option: " + arg);
   }
   if (options.index && options.revision) throw new Error("--index and --revision cannot be used together.");
+  return options;
+}
+
+interface ReportCliOptions {
+  output?: string;
+  badge?: string;
+  prComment?: string;
+}
+
+function parseReportOptions(args: string[]): ReportCliOptions {
+  const options: ReportCliOptions = {};
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--output") {
+      options.output = requireValue(args, ++index, "--output");
+    } else if (arg === "--badge") {
+      options.badge = requireValue(args, ++index, "--badge");
+    } else if (arg === "--pr-comment") {
+      options.prComment = requireValue(args, ++index, "--pr-comment");
+    } else if (arg === "--help" || arg === "-h") {
+      writeUsage();
+      return options;
+    } else {
+      throw new Error("Unknown report option: " + arg);
+    }
+  }
   return options;
 }
 
