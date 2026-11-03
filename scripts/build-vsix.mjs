@@ -43,7 +43,7 @@ const currentBranch = getGitBranch();
 const isMaster = currentBranch === 'master' || currentBranch === 'main';
 
 const packageJsonPath = path.join(rootDir, 'package.json');
-const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8').replace(/^\uFEFF/, ''));
 const currentVersion = pkg.version;
 
 console.log('='.repeat(70));

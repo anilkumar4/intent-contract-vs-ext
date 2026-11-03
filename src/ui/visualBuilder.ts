@@ -247,19 +247,30 @@ export class VisualContractBuilderPanel {
     const fileName = `${contract.name.toLowerCase().replace(/[^a-z0-9_-]/g, "-")}.yaml`;
     const filePath = path.join(intentDir, fileName);
 
+    let fileExists = false;
     try {
       await fs.access(filePath);
-      const answer = await vscode.window.showWarningMessage(
-        `Contract template "${fileName}" already exists in .intent/. Do you want to overwrite it?`,
-        { modal: true },
-        "Overwrite",
-        "Cancel"
-      );
+      fileExists = true;
+    } catch {
+      fileExists = false;
+    }
+
+    if (fileExists) {
+      let answer: string | undefined;
+      try {
+        answer = await vscode.window.showWarningMessage(
+          `Contract template "${fileName}" already exists in .intent/. Do you want to overwrite it?`,
+          { modal: true },
+          "Overwrite"
+        );
+      } catch {
+        // In environments where modal dialogs cannot be displayed (e.g. automated test windows),
+        // safely abort rather than overwriting existing contract files (D12).
+        return undefined;
+      }
       if (answer !== "Overwrite") {
         return undefined;
       }
-    } catch {
-      // File does not exist, proceed
     }
 
     const yamlStr = YAML.stringify(contract, { indent: 2 });

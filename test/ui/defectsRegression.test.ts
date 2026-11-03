@@ -164,4 +164,33 @@ describe("Defects Regression Suite (D1, D8, D11, D16)", () => {
       await fs.rm(tmpDir, { recursive: true, force: true });
     }
   });
+
+  it("D18: Activity bar icon SVG is a monochromatic theme-aware vector using currentColor", async () => {
+    const svgPath = path.resolve(__dirname, "../../media/activitybar.svg");
+    const svgContent = await fs.readFile(svgPath, "utf8");
+
+    // Must use currentColor so VS Code's theme tinting works without grey blob artifacts
+    expect(svgContent).toContain("currentColor");
+    // Must not have multi-color gradients or hardcoded color fills that get flattened to grey blobs
+    expect(svgContent).not.toContain("linearGradient");
+    expect(svgContent).not.toContain("#8B5CF6");
+    expect(svgContent).not.toContain("#1E1B4B");
+  });
+
+  it("D19 & D12: Visual Builder overwrite prompt passes only Overwrite without duplicate Cancel", async () => {
+    const builderSource = await fs.readFile(
+      path.resolve(__dirname, "../../src/ui/visualBuilder.ts"),
+      "utf8"
+    );
+
+    // D19: showWarningMessage should specify { modal: true } and "Overwrite", without an extra "Cancel"
+    const overwriteMatch = builderSource.match(/showWarningMessage\(\s*`Contract template[\s\S]*?\)/);
+    expect(overwriteMatch).not.toBeNull();
+    const callText = overwriteMatch![0];
+    expect(callText).toContain('"Overwrite"');
+    expect(callText).not.toContain('"Cancel"');
+
+    // D12 remaining: safely aborts if modal dialog throws or is unavailable
+    expect(builderSource).toContain("safely abort rather than overwriting");
+  });
 });

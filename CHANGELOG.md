@@ -1,9 +1,32 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to the **Intent Contract** extension, CLI, and MCP server are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+---
+
+## [0.4.5] - 2026-11-03
+
+### Fixed & Hardened (Regression & Concurrency Release)
+- **D18 (Theme-Aware Monochromatic Activity Bar Vector)**:
+  - Replaced multi-color gradient fills in `media/activitybar.svg` with a clean, single-color `currentColor` outline vector.
+  - Aligns with VS Code's activity bar alpha-mask rendering pipeline, eliminating grey blob artifacts while preserving the full brand shield, contract document, folded corner, and signature checkmark across light, dark, and high-contrast themes.
+  - The rich multi-color transparent PNG (`icon.png`) remains active for VS Code Marketplace and Extension Details headers.
+- **D19 (Visual Contract Builder Single Cancel Action)**:
+  - Removed duplicate `Cancel` string argument from the modal warning dialog in `src/ui/visualBuilder.ts`.
+  - VS Code's modal dialog (`{ modal: true }`) natively provides a Cancel action; the overwrite prompt now cleanly displays `Overwrite · Cancel` without repetitive duplicate options.
+- **D12 (Automated Test Window Dialog Fallback)**:
+  - Separated template existence check from interactive dialog presentation.
+  - In headless CI runners or automated test windows where modal dialogs are suppressed or throw, contract saving safely aborts rather than accidentally overwriting existing contracts.
+- **D20 (Concurrent Session Lock & Baseline Ref Self-Healing)**:
+  - Hardened `withRepoLock` by doubling retry attempts (120 attempts / ~6 seconds) and catching transient Windows file locking errors (`EBUSY`, `EPERM`, `EACCES`) alongside `EEXIST`.
+  - `stopIntentContract` removes session state before releasing references, and `pruneOrphanBaselineRefs` actively inspects current session state to ensure active baseline references are never pruned.
+  - `ensurePolicyBaselineRef` automatically validates and re-pins missing baseline references in Git before any verification or hook check runs, preventing `git gc` from pruning unreferenced tree objects.
+  - In the event that a baseline tree was already purged from Git, cleanly cleans up the dead session and provides actionable guidance rather than failing with exit code 2.
+- **Lazy Extension Workspace Activation**:
+  - Removed global `onStartupFinished` activation event in `package.json`, ensuring the extension activates lazily only in workspaces containing Intent Contract configurations (`.intent/*.yaml`, `.intent/*.yml`, `.intent/.state.json`) or when an Intent Contract command is invoked.
 
 ---
 
@@ -31,9 +54,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **D3 (Verification Settings Implementation)**:
   - Wired `intentContract.ignoredPaths` and `intentContract.severityOverrides` directly into workspace check verification, ensuring manual and automated checks respect custom ignored patterns and rule severity overrides.
 - **D4 (Accurate Audit Ledger Scope Column)**:
-  - Refactored Section 3 modified files ledger in `src/state/report.ts` to compute actual scope status (`🛡️ In-Scope`, `⚠️ Out of Scope`, `🔒 Read-Only`) based on findings and contract policy rather than hardcoding `In-Scope`.
+  - Refactored Section 3 modified files ledger in `src/state/report.ts` to compute actual scope status (`ðŸ›¡ï¸ In-Scope`, `âš ï¸ Out of Scope`, `ðŸ”’ Read-Only`) based on findings and contract policy rather than hardcoding `In-Scope`.
 - **D5 (Truthful Scorecard Certification)**:
-  - Optional and unconfigured detectors (e.g. architecture drift without a diagram, disabled test weakening or dependencies in `forbid`) are now certified as `⚪ Not Configured` or `⚪ Not Evaluated` instead of falsely claiming `✅ PASS`.
+  - Optional and unconfigured detectors (e.g. architecture drift without a diagram, disabled test weakening or dependencies in `forbid`) are now certified as `âšª Not Configured` or `âšª Not Evaluated` instead of falsely claiming `âœ… PASS`.
 - **D6 (Audit Waiver History & Expired TTL Separation)**:
   - Passed complete waiver history to compliance reports so historical/expired waivers appear in Section 5 audit tables while strictly suppressing findings only for active (non-expired) waivers.
 - **D7 (MCP Self-Heal Warning Retention)**:
@@ -80,7 +103,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Guarded `.github/copilot-instructions.md` so it is only updated if the file already exists, avoiding false creation merely because a repository contains `.github/workflows/`.
   - Added clean file unlinking in `clearActiveContractFromAgents`: files created solely for Intent Contract with no other user content are deleted when stopping a session, leaving zero dormant untracked files behind.
 - **Dynamic Test Fidelity Dashboard Hints**:
-  - Replaced narrow static hint with dynamic `formatTestFidelityHint` in `MissionControlDashboardPanel`, accurately reflecting matcher downgrades (`toBe` → `toBeTruthy`), deleted assertions, skipped tests, widened tolerances, and modified snapshots.
+  - Replaced narrow static hint with dynamic `formatTestFidelityHint` in `MissionControlDashboardPanel`, accurately reflecting matcher downgrades (`toBe` â†’ `toBeTruthy`), deleted assertions, skipped tests, widened tolerances, and modified snapshots.
 - **Context-Aware Waiver Justifications**:
   - Implemented `getContextualWaiverTemplates` in `src/ui/actions.ts` providing tailored justification suggestions per detector (`high_risk_files`, `dependencies`, `test_weakening`, `architecture_drift`, `symbol_scope`, `scope`).
   - CI/CD workflow edits now suggest pipeline and emergency build justifications rather than generic refactoring.
@@ -101,8 +124,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `generatePrCommentMarkdown(ctx)` for automated Pull Request comment formatting in GitHub Actions and GitLab CI.
   - Added `--badge <path>` and `--pr-comment <path>` flags to `intent-contract report` CLI command.
 - **Interactive Architecture Diagram Node Scoping**:
-  - In Visual Contract Builder (`src/ui/visualBuilder.ts`), selecting an architecture diagram dynamically discovers all architecture nodes and provides 1-click `+ Modify` and `🔒 Read-Only` scoping shortcuts, auto-generating `node_mappings`.
-  - In Visual Architecture Drift Inspector (`src/ui/architectureInspector.ts`), added an interactive Architecture Nodes table with direct `+ Add to Scope` and `🔒 Lock Read-Only` actions that dynamically update the active contract baseline in Git via `updateContractInBaseline`.
+  - In Visual Contract Builder (`src/ui/visualBuilder.ts`), selecting an architecture diagram dynamically discovers all architecture nodes and provides 1-click `+ Modify` and `ðŸ”’ Read-Only` scoping shortcuts, auto-generating `node_mappings`.
+  - In Visual Architecture Drift Inspector (`src/ui/architectureInspector.ts`), added an interactive Architecture Nodes table with direct `+ Add to Scope` and `ðŸ”’ Lock Read-Only` actions that dynamically update the active contract baseline in Git via `updateContractInBaseline`.
 
 ---
 
@@ -113,7 +136,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Reduced default diagnostic debounce from 800 ms to 300 ms (`intentContract.debounce`).
   - Optimized file change detection to skip large un-tracked directories like `node_modules` and build outputs, cutting status scan times by over 80%.
   - Parallelized Git tree comparison engine with fast-exit optimizations for unchanged trees.
-  - Overall end-to-end contract verification latency is now **~600–900 ms** (well below the 1.5-second target).
+  - Overall end-to-end contract verification latency is now **~600â€“900 ms** (well below the 1.5-second target).
 - **Resilient MCP Server Configuration**:
   - Generated Model Context Protocol (MCP) server configurations now survive extension updates without breaking or pointing to stale versioned folders.
   - Automatically maintains backward compatibility across extension upgrades.
@@ -147,7 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added `get_remediation_instructions` tool to provide structured, actionable step-by-step guidance for autonomous agents (Cursor, Claude Code, GitHub Copilot, Google Antigravity).
   - Added `self_heal_contract` tool for autonomous remediation, safely reverting out-of-scope file modifications while preserving valid in-scope progress.
 - **Ambient In-Editor Scope CodeLens**:
-  - Non-intrusive status indicators at line 1 of files during active sessions (`🛡️ Intent: In-Scope`, `🔒 Intent: Read-Only`, `⚠️ Intent: Out of Scope`) with 1-click quick actions to add to scope or lock as read-only.
+  - Non-intrusive status indicators at line 1 of files during active sessions (`ðŸ›¡ï¸ Intent: In-Scope`, `ðŸ”’ Intent: Read-Only`, `âš ï¸ Intent: Out of Scope`) with 1-click quick actions to add to scope or lock as read-only.
   - Added `intentContract.enableCodeLens` configuration setting (enabled by default).
 - **Dynamic Agent Prompt Hot-Sync Engine**:
   - Automatically syncs active task intent, permitted file globs, symbols, and forbidden policies into active agent instruction files (Cursor `.cursor/rules/`, Google Antigravity `.agents/rules/`, Claude Code `CLAUDE.md`, and GitHub Copilot `.github/copilot-instructions.md`).
@@ -155,7 +178,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Full Architectural & UX Documentation Overhaul**:
   - Updated `docs/intent-contract-architecture.md` and `README.md` with complete architectural diagrams, UI layers, CodeLens mechanics, and MCP 2.0 autonomous agent correction loops.
 - **Interactive Quick-Fix Code Actions (`src/ui/quickFix.ts`)**:
-  - Native VS Code QuickFix (`Ctrl+.` / 💡) actions on active contract diagnostics to add files to scope, revert files to baseline, add symbols to modify scope, or inspect in the Architecture Inspector.
+  - Native VS Code QuickFix (`Ctrl+.` / ðŸ’¡) actions on active contract diagnostics to add files to scope, revert files to baseline, add symbols to modify scope, or inspect in the Architecture Inspector.
 - **Interactive Status Bar HUD & Quick Switcher**:
   - Clicking the Status Bar shield opens a rich quick-action launcher with live session status, 1-click dashboard navigation, agent prompt copying, compliance report generation, manual recheck, and contract switching.
 - **Session Audit & Compliance Report Generator (`src/state/report.ts`)**:
@@ -168,7 +191,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Smart Waiver Justification Templates (`src/ui/actions.ts`)**:
   - Replaced raw text input with smart quick-select justification templates (`Authorized refactoring`, `Approved scope extension`, `Approved dependency update`, `Architectural boundary exception`) with custom fallback for rapid 1-click approvals.
 - **Mission Control Dashboard Enhancements (`src/ui/dashboard.ts`)**:
-  - Added direct buttons for `📑 Export Compliance Report` and `🤖 Configure Agents & Hooks` directly in the Mission Control toolbar.
+  - Added direct buttons for `ðŸ“‘ Export Compliance Report` and `ðŸ¤– Configure Agents & Hooks` directly in the Mission Control toolbar.
 
 ### Fixed
 - **Symbol Scope Attribution for Local Variables**:

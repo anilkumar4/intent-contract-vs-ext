@@ -175,6 +175,17 @@ export async function startIntentContract(
       await releaseBaseline(root, snapshot.baselineRef);
       throw error;
     }
+
+    // Verify and ensure baseline ref is pinned in Git (D20 hardening)
+    try {
+      const verifiedRef = (await gitText(root, ["rev-parse", "--verify", session.baselineRef])).trim();
+      if (!verifiedRef) {
+        await gitText(root, ["update-ref", session.baselineRef, snapshot.baselineTreeHash]);
+      }
+    } catch {
+      await gitText(root, ["update-ref", session.baselineRef, snapshot.baselineTreeHash]).catch(() => {});
+    }
+
     if (previous) await releaseSessionBaselineRefs(root, previous);
     await pruneOrphanBaselineRefs(root, new Set([session.baselineRef, session.originalBaselineRef].filter(Boolean) as string[]));
     await unlinkIfPresent(path.join(root, ".intent", ".violations.md"));
@@ -186,8 +197,9 @@ export async function startIntentContract(
 export async function stopIntentContract(root: string): Promise<void> {
   return withRepoLock(root, async () => {
     const session = await readSession(root);
-    if (session) await releaseSessionBaselineRefs(root, session);
+    // Remove session state first so any concurrent reader/check immediately knows session is stopped (D20)
     await removeSession(root);
+    if (session) await releaseSessionBaselineRefs(root, session);
     await pruneOrphanBaselineRefs(root, new Set());
     await unlinkIfPresent(path.join(root, ".intent", ".violations.md"));
   });
@@ -197,14 +209,19 @@ async function withRepoLock<T>(root: string, fn: () => Promise<T>): Promise<T> {
   const lockDir = path.join(root, ".git");
   await fs.mkdir(lockDir, { recursive: true });
   const lockFile = path.join(lockDir, "intent-contract.lock");
-  const maxAttempts = 60;
+  const maxAttempts = 120;
   let handle: fs.FileHandle | undefined;
   for (let i = 0; i < maxAttempts; i++) {
     try {
       handle = await fs.open(lockFile, "wx");
       break;
     } catch (err: unknown) {
-      if (typeof err === "object" && err !== null && "code" in err && (err as { code: string }).code === "EEXIST") {
+      if (
+        typeof err === "object" &&
+        err !== null &&
+        "code" in err &&
+        ["EEXIST", "EPERM", "EBUSY", "EACCES"].includes((err as { code: string }).code)
+      ) {
         try {
           const stat = await fs.stat(lockFile);
           if (Date.now() - stat.mtimeMs > 10000) {
@@ -232,6 +249,12 @@ async function withRepoLock<T>(root: string, fn: () => Promise<T>): Promise<T> {
 
 async function pruneOrphanBaselineRefs(root: string, activeRefs: Set<string>): Promise<void> {
   try {
+    // Protect active session refs from ever being pruned as orphans (D20)
+    const active = await readSession(root);
+    if (active) {
+      if (active.baselineRef) activeRefs.add(active.baselineRef);
+      if (active.originalBaselineRef) activeRefs.add(active.originalBaselineRef);
+    }
     const raw = await gitText(root, ["for-each-ref", "--format=%(refname)", "refs/intent-contract/baselines/"]);
     const lines = raw.split("\n").map((l) => l.trim()).filter(Boolean);
     for (const ref of lines) {
@@ -297,6 +320,30 @@ export function policyTreeHash(session: ContractSession): string {
 }
 
 export async function ensurePolicyBaselineRef(root: string, session: ContractSession): Promise<ContractSession> {
+  // Always verify and re-pin primary baselineRef if it was deleted or missing (D20 hardening against git gc)
+  if (session.baselineRef) {
+    let refOk = false;
+    try {
+      const verified = (await gitText(root, ["rev-parse", "--verify", session.baselineRef])).trim();
+      if (verified) refOk = true;
+    } catch {
+      refOk = false;
+    }
+
+    if (!refOk) {
+      try {
+        await gitText(root, ["cat-file", "-e", `${session.baselineTreeHash}^{tree}`]);
+        await gitText(root, ["update-ref", session.baselineRef, session.baselineTreeHash]);
+      } catch {
+        // Tree object is gone from git (e.g. pruned by git gc)
+        await removeSession(root).catch(() => {});
+        throw new Error(
+          `The active contract baseline ref (${session.baselineRef}) was pruned from Git. The dead session was stopped. Run 'intent-contract start <contract>' to start a fresh session.`
+        );
+      }
+    }
+  }
+
   const policyTree = policyTreeHash(session);
   if (policyTree === session.baselineTreeHash) return session;
   if (session.originalBaselineRef) {

@@ -6,6 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { diffTrees } from "../../src/git/diff";
 import { revertFileToBaseline } from "../../src/git/revert";
 import { captureBaseline, createWorkingTreeSnapshot, updateContractInBaseline } from "../../src/git/snapshot";
+import { ensurePolicyBaselineRef } from "../../src/runtime/contracts";
+import type { ContractSession } from "../../src/state/session";
 
 const temporaryRepositories: string[] = [];
 
@@ -119,6 +121,37 @@ describe("temporary index baseline", () => {
     // Verify app.ts in new tree is untouched
     const catApp = git(root, ["cat-file", "blob", `${newTree}:app.ts`]);
     expect(catApp).toBe("const initial = 1;\n");
+  });
+
+  it("D20: recovers and re-pins missing baseline ref to protect against git gc", async () => {
+    const root = await fs.mkdtemp(path.join(process.cwd(), ".intent-contract-d20-test-"));
+    temporaryRepositories.push(root);
+    git(root, ["init"]);
+    git(root, ["config", "user.name", "Intent Contract Test"]);
+    git(root, ["config", "user.email", "intent-test@example.invalid"]);
+
+    await fs.writeFile(path.join(root, "app.ts"), "const initial = 1;\n");
+    git(root, ["add", "."]);
+    git(root, ["commit", "-m", "initial"]);
+
+    const snapshot = await captureBaseline(root);
+    const session: ContractSession = {
+      ...snapshot,
+      activeContract: ".intent/task.yaml",
+      originalBaselineTreeHash: snapshot.baselineTreeHash
+    };
+
+    // Simulate D20 race condition: baseline ref was accidentally pruned or deleted from Git refs
+    git(root, ["update-ref", "-d", session.baselineRef]);
+    expect(() => git(root, ["rev-parse", "--verify", session.baselineRef])).toThrow();
+
+    // ensurePolicyBaselineRef should detect missing ref and re-pin it immediately
+    const healedSession = await ensurePolicyBaselineRef(root, session);
+    expect(healedSession.baselineRef).toBe(session.baselineRef);
+
+    // Verify ref now exists again in git and resolves to the baseline tree
+    const restoredTree = git(root, ["rev-parse", "--verify", `${session.baselineRef}^{tree}`]).trim();
+    expect(restoredTree).toBe(session.baselineTreeHash);
   });
 });
 
