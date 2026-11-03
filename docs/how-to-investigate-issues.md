@@ -114,3 +114,4 @@ When a user submits an issue via GitHub Issues, VS Code Command Palette (`Intent
 - **GitHub Issues**: [github.com/anilkumar4/intent-contract-vs-ext/issues](https://github.com/anilkumar4/intent-contract-vs-ext/issues)
 - **Discussions & Q&A**: [github.com/anilkumar4/intent-contract-vs-ext/discussions](https://github.com/anilkumar4/intent-contract-vs-ext/discussions)
 - **Marketplace Q&A**: [marketplace.visualstudio.com/items?itemName=anilkumar4.intent-contract](https://marketplace.visualstudio.com/items?itemName=anilkumar4.intent-contract)
+
