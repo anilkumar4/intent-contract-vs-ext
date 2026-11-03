@@ -115,3 +115,7 @@ Test weakening, tautological-test detection, and symbol-level scope are included
 ## Project architecture
 
 See [the editable Draw.io architecture diagram](https://github.com/anilkumar4/intent-contract-vs-ext/blob/master/docs/intent-contract-architecture.drawio) and [the detailed architecture guide](https://github.com/anilkumar4/intent-contract-vs-ext/blob/master/docs/intent-contract-architecture.md) for module responsibilities, baseline and verification flows, architecture parsing, import resolution, and the extension/CLI/MCP integration.
+
+## Issue Triage & Contributing
+
+If you encounter an issue or wish to contribute, please refer to the [Issue Investigation & Debugging Guide](docs/how-to-investigate-issues.md) for standard diagnostic checklists, headless CLI reproduction commands, and Git baseline verification steps.
