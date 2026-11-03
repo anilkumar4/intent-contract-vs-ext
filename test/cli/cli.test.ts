@@ -43,7 +43,7 @@ describe("headless CLI", () => {
 
   it("enforces architecture_drift for a contract passed to check", async () => {
     const root = await createArchitectureRepository();
-    await fs.writeFile(path.join(root, "src/billing/invoice.ts"), 'import "../inventory/db";\n');
+    await fs.writeFile(path.join(root, "src/billing/invoice.ts"), 'export const invoice = 1;\nimport "../inventory/db";\n');
     const output: string[] = [];
     vi.spyOn(process.stdout, "write").mockImplementation(((chunk: string | Uint8Array) => {
       output.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8"));
@@ -284,6 +284,7 @@ async function createArchitectureRepository(): Promise<string> {
     "allow_exceptions: false"
   ].join("\n") + "\n");
   await fs.writeFile(path.join(root, "docs/system.mmd"), "flowchart LR\nBilling --> Shared\nInventory --> Shared\n");
+  await fs.writeFile(path.join(root, "tsconfig.json"), '{"compilerOptions":{"module":"commonjs","moduleResolution":"node"}}\n');
   await fs.writeFile(path.join(root, "src/billing/invoice.ts"), "export const invoice = 1;\n");
   await fs.writeFile(path.join(root, "src/inventory/db.ts"), "export const db = 1;\n");
   await fs.writeFile(path.join(root, "src/shared/logger.ts"), "export const log = 1;\n");

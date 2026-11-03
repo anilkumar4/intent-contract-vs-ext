@@ -59,7 +59,7 @@ describe("MCP stdio JSON-RPC protocol", () => {
   it("enforces architecture_drift through verify_intent_contract", async () => {
     const root = await createArchitectureRepository();
     await startIntentContract(root, "architecture");
-    await fs.writeFile(path.join(root, "src/billing/invoice.ts"), 'import "../inventory/db";\n');
+    await fs.writeFile(path.join(root, "src/billing/invoice.ts"), 'export const invoice = 1;\nimport "../inventory/db";\n');
 
     const verification = JSON.parse((await handleRpcMessage(JSON.stringify({
       jsonrpc: "2.0", id: 10, method: "tools/call", params: { name: "verify_intent_contract", arguments: {} }
@@ -186,6 +186,7 @@ async function createArchitectureRepository(): Promise<string> {
     "allow_exceptions: false"
   ].join("\n") + "\n");
   await fs.writeFile(path.join(root, "docs/system.mmd"), "flowchart LR\nBilling --> Shared\nInventory --> Shared\n");
+  await fs.writeFile(path.join(root, "tsconfig.json"), '{"compilerOptions":{"module":"commonjs","moduleResolution":"node"}}\n');
   await fs.writeFile(path.join(root, "src/billing/invoice.ts"), "export const invoice = 1;\n");
   await fs.writeFile(path.join(root, "src/inventory/db.ts"), "export const db = 1;\n");
   await fs.writeFile(path.join(root, "src/shared/logger.ts"), "export const log = 1;\n");
