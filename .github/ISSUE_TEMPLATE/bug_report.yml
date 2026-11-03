@@ -1,0 +1,78 @@
+name: "🐛 Bug Report"
+description: "File an issue describing a defect, unexpected behavior, or false finding in Intent Contract."
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue! Please provide as much context as possible so we can investigate and fix it promptly.
+  - type: input
+    id: version
+    attributes:
+      label: "Intent Contract Version"
+      description: "Version of Intent Contract installed (e.g. 0.4.5, check Extensions tab or status bar)"
+      placeholder: "0.4.5"
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: "Operating System"
+      options:
+        - "Windows 11 / 10"
+        - "macOS (Apple Silicon M-series)"
+        - "macOS (Intel)"
+        - "Linux (Ubuntu / Debian)"
+        - "Linux (Other / WSL)"
+    validations:
+      required: true
+  - type: input
+    id: vscode_version
+    attributes:
+      label: "VS Code Version"
+      placeholder: "1.95.0"
+    validations:
+      required: false
+  - type: textarea
+    id: description
+    attributes:
+      label: "Description of the Bug"
+      description: "A clear and concise description of what the bug is."
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: "Steps to Reproduce"
+      description: "Steps to reproduce the behavior:"
+      value: |
+        1. Start contract '...'
+        2. Modify file '...'
+        3. Run 'intent-contract check' or inspect VS Code diagnostics
+        4. See error '...'
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: "Expected Behavior"
+      description: "What did you expect to happen instead?"
+    validations:
+      required: true
+  - type: textarea
+    id: contract_yaml
+    attributes:
+      label: "Relevant Contract Configuration (Sanitized)"
+      description: "Paste any relevant .intent/*.yaml contract contents (please sanitize proprietary paths)."
+      render: yaml
+    validations:
+      required: false
+  - type: textarea
+    id: cli_output
+    attributes:
+      label: "CLI or Extension Log Output"
+      description: "Paste output from 'intent-contract check' or the VS Code Output panel ('Intent Contract')."
+      render: shell
+    validations:
+      required: false

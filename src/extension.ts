@@ -233,6 +233,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         void vscode.window.showErrorMessage(`Could not generate compliance report: ${err instanceof Error ? err.message : String(err)}`);
       }
     }),
+    vscode.commands.registerCommand("intentContract.reportIssue", async () => {
+      const extVersion = (context.extension?.packageJSON as { version?: string } | undefined)?.version ?? "0.4.5";
+      const vsVersion = vscode.version;
+      const osPlatform = `${process.platform} ${process.arch}`;
+      const title = encodeURIComponent("[Bug]: ");
+      const body = encodeURIComponent(
+        `### Description\n<!-- Describe the issue or question -->\n\n### Steps to Reproduce\n1. \n2. \n\n### Environment\n- **Intent Contract:** v${extVersion}\n- **VS Code:** ${vsVersion}\n- **OS:** ${osPlatform}\n`
+      );
+      const url = `https://github.com/anilkumar4/intent-contract-vs-ext/issues/new?title=${title}&body=${body}`;
+      await vscode.env.openExternal(vscode.Uri.parse(url));
+    }),
     vscode.commands.registerCommand("intentContract.statusClick", async () => {
       const activeFindings = findings.filter((f) => !waivers.has(f.id));
       const items: Array<vscode.QuickPickItem & { action: () => Promise<void> | void }> = [];
@@ -316,6 +327,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           } catch {
             await vscode.commands.executeCommand("workbench.view.extension.intent-contract-sidebar");
           }
+        }
+      });
+
+      items.push({
+        label: "$(comment-discussion) Report an Issue / Submit Feedback...",
+        description: "Open GitHub issue tracker with diagnostic environment details pre-filled",
+        action: () => {
+          void vscode.commands.executeCommand("intentContract.reportIssue");
         }
       });
 

@@ -1,0 +1,39 @@
+name: "💡 Feature Request / Guardrail Idea"
+description: "Suggest a new safety detector, agent integration, or workflow enhancement."
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea for a new AI guardrail, framework detector, or developer workflow? Let us know!
+  - type: textarea
+    id: problem
+    attributes:
+      label: "AI Agent Problem or Challenge"
+      description: "What failure mode or rogue agent behavior are you trying to protect against?"
+      placeholder: "e.g., Autonomous agents frequently add unvetted npm packages or alter database migrations without warning..."
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: "Proposed Solution"
+      description: "How should Intent Contract detect, prevent, or remediate this?"
+    validations:
+      required: true
+  - type: textarea
+    id: syntax_proposal
+    attributes:
+      label: "Proposed .intent/*.yaml Syntax (Optional)"
+      description: "How might this look in contract YAML configuration?"
+      render: yaml
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "Alternatives Considered"
+      description: "Any alternative solutions or workarounds you've explored?"
+    validations:
+      required: false

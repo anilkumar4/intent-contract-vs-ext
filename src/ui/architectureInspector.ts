@@ -184,12 +184,18 @@ export class ArchitectureInspectorPanel {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Intent Contract: Architecture Drift Inspector</title>
   <script type="module">
-    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-    mermaid.initialize({
-      startOnLoad: true,
-      theme: 'dark',
-      flowchart: { curve: 'basis', htmlLabels: true }
-    });
+    try {
+      const module = await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs');
+      const mermaid = module.default;
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: 'dark',
+        flowchart: { curve: 'basis', htmlLabels: true }
+      });
+    } catch {
+      const notice = document.getElementById('mermaid-offline-notice');
+      if (notice) notice.style.display = 'block';
+    }
   </script>
   <style>
     :root {
@@ -485,15 +491,25 @@ forbid:
     </div>
 
     <div class="panel-section">
-      <div class="section-header">
+      <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
         <div class="section-title">
           <span>📐</span> Live Architectural Graph & Drift Overlay
         </div>
+        <div class="zoom-controls" style="display: flex; gap: 6px;">
+          <button class="btn btn-secondary" onclick="zoomIn()" title="Zoom In">🔍 +</button>
+          <button class="btn btn-secondary" onclick="zoomOut()" title="Zoom Out">🔍 −</button>
+          <button class="btn btn-secondary" onclick="zoomReset()" title="Fit to View / Reset">⟲ Fit to View</button>
+        </div>
       </div>
-      <div class="diagram-container">
-        <pre class="mermaid">
+      <div id="mermaid-offline-notice" class="callout callout-warning" style="display: none; margin-bottom: 12px;">
+        <strong>Offline Notice:</strong> Could not load dynamic Mermaid diagram renderer from CDN. Connect to the internet to view interactive vector graph rendering.
+      </div>
+      <div class="diagram-container" style="overflow: auto; max-height: 550px;">
+        <div id="diagramCanvas" style="transform-origin: center top; transition: transform 0.2s ease; display: inline-block;">
+          <pre class="mermaid">
 ${mermaidSrc}
-        </pre>
+          </pre>
+        </div>
       </div>
       <div class="legend">
         <div class="legend-item"><div class="legend-dot dot-allowed"></div> Allowed Architectural Boundary</div>
@@ -600,6 +616,25 @@ ${mermaidSrc}
     }
     function scopeNode(node, mode) {
       vscode.postMessage({ command: 'scopeNode', node: node, mode: mode });
+    }
+    let currentZoom = 1.0;
+    function zoomIn() {
+      currentZoom = Math.min(2.5, currentZoom + 0.2);
+      applyZoom();
+    }
+    function zoomOut() {
+      currentZoom = Math.max(0.4, currentZoom - 0.2);
+      applyZoom();
+    }
+    function zoomReset() {
+      currentZoom = 1.0;
+      applyZoom();
+    }
+    function applyZoom() {
+      const canvas = document.getElementById('diagramCanvas');
+      if (canvas) {
+        canvas.style.transform = 'scale(' + currentZoom + ')';
+      }
     }
   </script>
 </body>

@@ -107,6 +107,9 @@ export class MissionControlDashboardPanel {
           case "configureAgents":
             void vscode.commands.executeCommand("intentContract.configureAgents");
             break;
+          case "reportIssue":
+            void vscode.commands.executeCommand("intentContract.reportIssue");
+            break;
         }
       },
       null,
@@ -365,6 +368,7 @@ export class MissionControlDashboardPanel {
     <button class="btn btn-secondary" onclick="sendMessage('configureAgents')">🤖 Configure Agents & Hooks</button>
     <button class="btn btn-secondary" onclick="sendMessage('openWalkthrough')">🚀 Getting Started Walkthrough</button>
     <button class="btn btn-secondary" onclick="sendMessage('openGuide')">📖 Vibe Coding Guide</button>
+    <button class="btn btn-secondary" onclick="sendMessage('reportIssue')">🐛 Report Issue / Feedback</button>
   </div>
 
   <div class="grid-scorecards">

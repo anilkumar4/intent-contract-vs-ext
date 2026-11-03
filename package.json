@@ -114,6 +114,11 @@
         "command": "intentContract.exportReport",
         "title": "Intent Contract: Export Session Compliance Report",
         "icon": "$(report)"
+      },
+      {
+        "command": "intentContract.reportIssue",
+        "title": "Intent Contract: Report an Issue / Submit Feedback",
+        "icon": "$(comment-discussion)"
       }
     ],
     "viewsContainers": {
@@ -318,5 +323,9 @@
     "typescript": "^5.6.2",
     "vite": "^7.3.7",
     "vitest": "^4.1.12"
-  }
+  },
+  "bugs": {
+    "url": "https://github.com/anilkumar4/intent-contract-vs-ext/issues"
+  },
+  "qna": "marketplace"
 }
