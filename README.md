@@ -1,5 +1,7 @@
 # Intent Contract
 
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/anilkumar4/badge.svg)](https://hub.xerj.org/contributors/anilkumar4)
+
 Intent Contract captures a local Git tree as a task baseline and detects changes that violate a contract in `.intent/*.yaml`. It reports changes after they are written and provides a baseline restore action. It does not block writes. The active contract is read from the captured baseline; stop and start again to activate contract edits.
 
 ## Why "Vibe Coding" Needs Intent Contract
