@@ -70,8 +70,11 @@ export class IntentContractCodeActionProvider implements vscode.CodeActionProvid
       }
 
       if (matched?.detector === "symbol_scope") {
+        const messageSymbolMatch = /Changed symbol "([^"]+)"/.exec(matched.message);
+        const extractedSymbol = messageSymbolMatch?.[1]?.trim();
         const wordRange = document.getWordRangeAtPosition(range.start);
-        const symbol = wordRange ? document.getText(wordRange).trim() : undefined;
+        const cursorWord = wordRange ? document.getText(wordRange).trim() : undefined;
+        const symbol = extractedSymbol && extractedSymbol !== "<top_level>" ? extractedSymbol : cursorWord;
         const addSymbolAction = new vscode.CodeAction(
           symbol
             ? `Intent Contract: Add symbol "${symbol}" to scope.modify_symbols`

@@ -193,4 +193,48 @@ describe("Defects Regression Suite (D1, D8, D11, D16)", () => {
     // D12 remaining: safely aborts if modal dialog throws or is unavailable
     expect(builderSource).toContain("safely abort rather than overwriting");
   });
+
+  it("Symbol QuickFix extracts symbol name from symbol_scope finding message when cursor is inside body", () => {
+    const provider = new IntentContractCodeActionProvider({
+      getRoot: () => "/workspace",
+      getFindings: () => [
+        {
+          id: "sym-1",
+          detector: "symbol_scope",
+          rule: "symbol_not_allowed",
+          severity: "error",
+          file: "src/orders.js",
+          line: 15,
+          message: 'Changed symbol "calculateTax" is not listed in scope.modify_symbols',
+          evidence: "return Math.round(order.subtotalCents * 0.09);"
+        }
+      ]
+    });
+
+    const doc = {
+      uri: vscode.Uri.file("/workspace/src/orders.js"),
+      getWordRangeAtPosition: () => new vscode.Range(14, 2, 14, 8),
+      getText: () => "return"
+    } as unknown as vscode.TextDocument;
+
+    const diag = new vscode.Diagnostic(
+      new vscode.Range(14, 0, 14, 1),
+      'Changed symbol "calculateTax" is not listed in scope.modify_symbols. Evidence: return Math.round(order.subtotalCents * 0.09);',
+      vscode.DiagnosticSeverity.Error
+    );
+    diag.source = "Intent Contract";
+
+    const actions = provider.provideCodeActions(doc, new vscode.Range(14, 0, 14, 1), {
+      diagnostics: [diag],
+      only: undefined,
+      triggerKind: 1
+    });
+
+    const symbolAction = actions.find((a) => a.title.includes("calculateTax"));
+    expect(symbolAction).toBeDefined();
+    expect(symbolAction?.command).toMatchObject({
+      command: "intentContract.addSymbolToScope",
+      arguments: ["calculateTax"]
+    });
+  });
 });
