@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.6] - 2026-11-25
+
+### Fixed & Improved
+- **Symbol Scope Quick Fix Resolution**:
+  - Updated `IntentContractCodeActionProvider` in `src/ui/quickFix.ts` to extract the symbol name from `symbol_scope` finding messages (`Changed symbol "<name>"`, ignoring `<top_level>`) before falling back to the word under cursor, so Quick Fix offers `Add symbol "<name>" to scope.modify_symbols` from any line inside a modified function body.
+- **CI & Packaging Compliance**:
+  - Replaced SVG badge with local PNG for `vsce` packaging compliance and hardened `architectureDrift` test fixtures.
+  - Updated documentation, license holder details, and added a regression test in `test/ui/defectsRegression.test.ts`.
+
+---
+
 ## [0.4.5] - 2026-11-03
 
 ### Fixed & Hardened (Regression & Concurrency Release)
