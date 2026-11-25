@@ -1,4 +1,4 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to the **Intent Contract** extension, CLI, and MCP server are documented in this file.
 
