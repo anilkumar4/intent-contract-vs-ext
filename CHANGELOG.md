@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.7] - 2026-11-25
+
+### Fixed
+- **Working-Tree Snapshot Racy-Git Reliability**:
+  - Updated `createWorkingTreeSnapshot` in `src/git/snapshot.ts` to reset the copied temporary index's stat cache via `git write-tree` + `git read-tree` before running `git add -A`.
+  - Prevents Git's racy-git stat check from skipping same-timestamp, same-byte-length edits when `copyFile` advances the temporary index's `mtime`.
+  - Added integration regression coverage in `test/git/snapshot.integration.test.ts`.
+
+---
+
 ## [0.4.6] - 2026-11-25
 
 ### Fixed & Improved
