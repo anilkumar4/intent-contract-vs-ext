@@ -56,14 +56,25 @@ export async function createWorkingTreeSnapshot(root: string, readOnlyPatterns: 
   const temporaryIndexPath = path.join(temporaryDirectory, "index");
   const indexPath = await getIndexPath(root);
   try {
+    const env = { GIT_INDEX_FILE: temporaryIndexPath };
+    let indexCopied = false;
     try {
       await fs.copyFile(indexPath, temporaryIndexPath);
+      indexCopied = true;
     } catch (error) {
       if (!isMissing(error)) throw error;
-      const env = { GIT_INDEX_FILE: temporaryIndexPath };
       await retryGitText(root, ["read-tree", "--empty"], env);
     }
-    const env = { GIT_INDEX_FILE: temporaryIndexPath };
+    if (indexCopied) {
+      // Clear inherited stat-cache metadata (mtime/size) so same-timestamp, same-length edits
+      // are never skipped by Git's racy-git check after copyFile updates temporaryIndexPath's mtime.
+      try {
+        const indexTree = (await retryGitText(root, ["write-tree"], env)).trim();
+        await retryGitText(root, ["read-tree", indexTree], env);
+      } catch {
+        await retryGitText(root, ["read-tree", "--empty"], env);
+      }
+    }
     await retryGitText(root, ["add", "-A", "--", "."], env);
 
     // Include ignored files covered by policy so changes to those paths remain visible.

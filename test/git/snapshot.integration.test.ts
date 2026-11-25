@@ -153,6 +153,32 @@ describe("temporary index baseline", () => {
     const restoredTree = git(root, ["rev-parse", "--verify", `${session.baselineRef}^{tree}`]).trim();
     expect(restoredTree).toBe(session.baselineTreeHash);
   });
+
+  it("captures same-timestamp, same-length edits even when real index mtime is older", async () => {
+    const root = await fs.mkdtemp(path.join(process.cwd(), ".intent-contract-racy-git-test-"));
+    temporaryRepositories.push(root);
+    git(root, ["init"]);
+    git(root, ["config", "user.name", "Intent Contract Test"]);
+    git(root, ["config", "user.email", "intent-test@example.invalid"]);
+
+    const filePath = path.join(root, "rate.js");
+    await fs.writeFile(filePath, "export const rate = 0.08;\n");
+    const originalStat = await fs.stat(filePath);
+    git(root, ["add", "rate.js"]);
+    git(root, ["commit", "-m", "initial"]);
+
+    const baseline = await createWorkingTreeSnapshot(root);
+
+    // Overwrite with exact same byte length and force the original mtime to simulate a same-second edit
+    await fs.writeFile(filePath, "export const rate = 0.09;\n");
+    await fs.utimes(filePath, originalStat.atime, originalStat.mtime);
+    const indexStat = await fs.stat(path.join(root, ".git", "index"));
+    expect(indexStat.mtimeMs).toBeGreaterThanOrEqual(originalStat.mtimeMs);
+
+    const current = await createWorkingTreeSnapshot(root);
+    const diff = await diffTrees(root, baseline, current);
+    expect(diff.changes).toContainEqual(expect.objectContaining({ file: "rate.js", status: "M" }));
+  });
 });
 
 function git(root: string, args: string[], options: { input?: string } = {}): string {
