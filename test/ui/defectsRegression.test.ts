@@ -21,6 +21,18 @@ vi.mock("vscode", () => {
     public fire = vi.fn();
     public dispose = vi.fn();
   }
+  const diagnosticCollections: Array<{
+    entries: Map<string, MockDiagnostic[]>;
+    set: (uri: { fsPath?: string; toString: () => string }, diags: MockDiagnostic[]) => void;
+    clear: () => void;
+    dispose: () => void;
+  }> = [];
+  const createdPanels: Array<{
+    webview: { html: string; asWebviewUri: (uri: { fsPath: string }) => string; onDidReceiveMessage: () => void };
+    onDidDispose: () => void;
+    reveal: () => void;
+    dispose: () => void;
+  }> = [];
 
   return {
     CodeActionKind: { QuickFix: 1 },
@@ -29,7 +41,49 @@ vi.mock("vscode", () => {
     Range: MockRange,
     Diagnostic: MockDiagnostic,
     DiagnosticSeverity: { Error: 0, Warning: 1 },
-    Uri: { file: (fsPath: string) => ({ scheme: "file", fsPath }) },
+    ViewColumn: { One: 1, Beside: 2 },
+    Uri: {
+      file: (fsPath: string) => ({ scheme: "file", fsPath, toString: () => `file://${fsPath}` }),
+      parse: (value: string) => ({ scheme: "file", fsPath: value.replace(/^file:\/\//, ""), toString: () => value }),
+      joinPath: (base: { fsPath: string }, ...parts: string[]) => {
+        const joined = [base.fsPath, ...parts].join("/");
+        return { scheme: "file", fsPath: joined, toString: () => `file://${joined}` };
+      }
+    },
+    languages: {
+      createDiagnosticCollection: () => {
+        const entries = new Map<string, MockDiagnostic[]>();
+        const collection = {
+          entries,
+          set: (uri: { fsPath?: string; toString: () => string }, diags: MockDiagnostic[]) => {
+            entries.set(uri.toString(), diags);
+          },
+          clear: () => entries.clear(),
+          dispose: () => entries.clear()
+        };
+        diagnosticCollections.push(collection);
+        return collection;
+      },
+      __collections: diagnosticCollections
+    },
+    window: {
+      activeTextEditor: undefined,
+      createWebviewPanel: () => {
+        const panel = {
+          webview: {
+            html: "",
+            asWebviewUri: (uri: { fsPath: string }) => `vscode-webview://local${uri.fsPath}`,
+            onDidReceiveMessage: vi.fn()
+          },
+          onDidDispose: vi.fn(),
+          reveal: vi.fn(),
+          dispose: vi.fn()
+        };
+        createdPanels.push(panel);
+        return panel;
+      },
+      __panels: createdPanels
+    },
     workspace: {
       getConfiguration: () => ({
         get: (_key: string, defaultValue: unknown) => defaultValue
@@ -41,6 +95,8 @@ vi.mock("vscode", () => {
 
 import { IntentContractCodeActionProvider } from "../../src/ui/quickFix";
 import { IntentContractCodeLensProvider } from "../../src/ui/codeLens";
+import { FindingDiagnostics } from "../../src/ui/diagnostics";
+import { ArchitectureInspectorPanel } from "../../src/ui/architectureInspector";
 import { readSession, writeSession, type ContractSession } from "../../src/state/session";
 import { matchesPatterns } from "../../src/detectors/scope";
 import * as vscode from "vscode";
@@ -236,5 +292,77 @@ describe("Defects Regression Suite (D1, D8, D11, D16)", () => {
       command: "intentContract.addSymbolToScope",
       arguments: ["calculateTax"]
     });
+  });
+
+  it("QuickFix diagnostic marks the entire line so Ctrl+. works at any column", () => {
+    const diagnostics = new FindingDiagnostics();
+    diagnostics.update("/workspace", [
+      {
+        id: "finding-line",
+        detector: "scope",
+        severity: "error",
+        file: "src/orders.ts",
+        line: 12,
+        message: "File is outside permitted scope",
+        evidence: "diff"
+      }
+    ]);
+
+    const collections = (vscode.languages as unknown as {
+      __collections: Array<{ entries: Map<string, Array<{ range: { startLine: number; startChar: number; endLine: number; endChar: number } }>> }>;
+    }).__collections;
+    const latest = collections[collections.length - 1];
+    const [fileDiags] = Array.from(latest.entries.values());
+    expect(fileDiags).toHaveLength(1);
+    expect(fileDiags[0].range).toMatchObject({
+      startLine: 11,
+      startChar: 0,
+      endLine: 11,
+      endChar: Number.MAX_SAFE_INTEGER
+    });
+    diagnostics.dispose();
+  });
+
+  it("D21: Architecture Inspector bundles Mermaid locally and invokes mermaid.run() without CDN", async () => {
+    ArchitectureInspectorPanel.currentPanel = undefined;
+    const panel = await ArchitectureInspectorPanel.createOrShow(
+      vscode.Uri.file("/ext") as vscode.Uri,
+      () => ({
+        root: "/workspace",
+        session: {
+          activeContract: ".intent/arch.yaml",
+          baselineTreeHash: "abc",
+          headSha: null,
+          startedAt: new Date().toISOString()
+        } as ContractSession,
+        contract: {
+          name: "arch",
+          intent: "arch",
+          scope: { modify: ["src/**"], read_only: [], modify_symbols: [] },
+          architecture: { diagram: "docs/system.mmd", node_mappings: {}, default_policy: "deny_unlisted_edges" },
+          forbid: ["architecture_drift"],
+          allow_exceptions: true
+        },
+        diagramPath: "docs/system.mmd",
+        analysis: {
+          graph: {
+            nodes: new Map([["Billing", { id: "Billing", label: "Billing", globs: ["src/billing/**"] }]]),
+            allowedEdges: new Set<`${string}->${string}`>()
+          },
+          violations: [],
+          findings: []
+        }
+      }),
+      async () => {},
+      async () => {}
+    );
+
+    const panels = (vscode.window as unknown as { __panels: Array<{ webview: { html: string } }> }).__panels;
+    const html = panels[panels.length - 1].webview.html;
+    expect(html).not.toContain("cdn.jsdelivr.net");
+    expect(html).toContain("vscode-webview://local/ext/media/mermaid.min.js");
+    expect(html).toContain("startOnLoad: false");
+    expect(html).toContain("mermaid.run(");
+    panel.dispose();
   });
 });

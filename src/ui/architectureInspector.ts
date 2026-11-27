@@ -193,21 +193,38 @@ export class ArchitectureInspectorPanel {
   <title>Intent Contract: Architecture Drift Inspector</title>
   <script src="${mermaidUri}"></script>
   <script>
-    try {
-      mermaid.initialize({
-        startOnLoad: false,
-        theme: 'dark',
-        flowchart: { curve: 'basis', htmlLabels: true }
-      });
-      document.addEventListener('DOMContentLoaded', () => {
-        mermaid.run();
-      });
-    } catch (e) {
-      document.addEventListener('DOMContentLoaded', () => {
+    (function () {
+      const showNotice = () => {
         const notice = document.getElementById('mermaid-offline-notice');
         if (notice) notice.style.display = 'block';
-      });
-    }
+      };
+      const renderMermaid = async () => {
+        try {
+          if (typeof mermaid === 'undefined') {
+            showNotice();
+            return;
+          }
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            flowchart: { curve: 'basis', htmlLabels: true }
+          });
+          const nodes = Array.from(document.querySelectorAll('.mermaid')).filter(
+            (el) => el.textContent && el.textContent.trim().length > 0
+          );
+          if (nodes.length > 0) {
+            await mermaid.run({ nodes });
+          }
+        } catch (e) {
+          showNotice();
+        }
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => { void renderMermaid(); });
+      } else {
+        void renderMermaid();
+      }
+    })();
   </script>
   <style>
     :root {
@@ -514,7 +531,7 @@ forbid:
         </div>
       </div>
       <div id="mermaid-offline-notice" class="callout callout-warning" style="display: none; margin-bottom: 12px;">
-        <strong>Offline Notice:</strong> Could not load dynamic Mermaid diagram renderer from CDN. Connect to the internet to view interactive vector graph rendering.
+        <strong>Diagram Render Notice:</strong> Could not render the bundled Mermaid diagram. Showing the raw diagram source below.
       </div>
       <div class="diagram-container" style="overflow: auto; max-height: 550px;">
         <div id="diagramCanvas" style="transform-origin: center top; transition: transform 0.2s ease; display: inline-block;">
