@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.4.8] - 2026-11-27
+
+### Fixed
+- **D21 (Architecture Inspector Mermaid Graph Rendering)**:
+  - Bundled `mermaid.min.js` into `media/` during build and loaded it locally in `ArchitectureInspectorPanel` (`src/ui/architectureInspector.ts`) via `webview.asWebviewUri(...)`, eliminating the external CDN dependency.
+  - Switched `mermaid.initialize` to `startOnLoad: false` and invoked `mermaid.run({ nodes })` after DOM ready (or immediately when already loaded), with error fallback notice handling.
+- **Full-Line Diagnostic Range for Quick Fix**:
+  - Updated `FindingDiagnostics.update` in `src/ui/diagnostics.ts` to mark the full line (`Range(lineIndex, 0, lineIndex, Number.MAX_SAFE_INTEGER)`) instead of columns `0–1`, so `Ctrl+.` offers Intent Contract Quick Fixes regardless of cursor column.
+- **Regression Coverage**:
+  - Added regression tests in `test/ui/defectsRegression.test.ts` for full-line diagnostic ranges and bundled Architecture Inspector Mermaid output.
+
+---
+
 ## [0.4.7] - 2026-11-25
 
 ### Fixed
