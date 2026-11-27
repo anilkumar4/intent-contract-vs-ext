@@ -17,6 +17,7 @@ export interface ArchitectureInspectorContext {
 export class ArchitectureInspectorPanel {
   public static currentPanel: ArchitectureInspectorPanel | undefined;
   private readonly panel: vscode.WebviewPanel;
+  private readonly extensionUri: vscode.Uri;
   private disposables: vscode.Disposable[] = [];
   private getContext: () => ArchitectureInspectorContext;
   private onRecheck: () => Promise<void>;
@@ -49,6 +50,7 @@ export class ArchitectureInspectorPanel {
 
     ArchitectureInspectorPanel.currentPanel = new ArchitectureInspectorPanel(
       panel,
+      extensionUri,
       getContext,
       onRecheck,
       onRevertFile
@@ -59,11 +61,13 @@ export class ArchitectureInspectorPanel {
 
   private constructor(
     panel: vscode.WebviewPanel,
+    extensionUri: vscode.Uri,
     getContext: () => ArchitectureInspectorContext,
     onRecheck: () => Promise<void>,
     onRevertFile: (file: string) => Promise<void>
   ) {
     this.panel = panel;
+    this.extensionUri = extensionUri;
     this.getContext = getContext;
     this.onRecheck = onRecheck;
     this.onRevertFile = onRevertFile;
@@ -177,24 +181,32 @@ export class ArchitectureInspectorPanel {
       mermaidSrc = renderArchitectureDriftDiagram(analysis.graph, violations, ctx.diagramPath);
     }
 
+    const mermaidUri = this.panel.webview.asWebviewUri(
+      vscode.Uri.joinPath(this.extensionUri, "media", "mermaid.min.js")
+    );
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Intent Contract: Architecture Drift Inspector</title>
-  <script type="module">
+  <script src="${mermaidUri}"></script>
+  <script>
     try {
-      const module = await import('https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs');
-      const mermaid = module.default;
       mermaid.initialize({
-        startOnLoad: true,
+        startOnLoad: false,
         theme: 'dark',
         flowchart: { curve: 'basis', htmlLabels: true }
       });
-    } catch {
-      const notice = document.getElementById('mermaid-offline-notice');
-      if (notice) notice.style.display = 'block';
+      document.addEventListener('DOMContentLoaded', () => {
+        mermaid.run();
+      });
+    } catch (e) {
+      document.addEventListener('DOMContentLoaded', () => {
+        const notice = document.getElementById('mermaid-offline-notice');
+        if (notice) notice.style.display = 'block';
+      });
     }
   </script>
   <style>

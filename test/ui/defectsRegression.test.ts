@@ -69,13 +69,13 @@ describe("Defects Regression Suite (D1, D8, D11, D16)", () => {
     } as vscode.TextDocument;
 
     const diag = new vscode.Diagnostic(
-      new vscode.Range(0, 0, 0, 1),
+      new vscode.Range(0, 0, 0, Number.MAX_SAFE_INTEGER),
       "File is outside permitted scope",
       vscode.DiagnosticSeverity.Warning
     );
     diag.source = "Intent Contract";
 
-    const actions = provider.provideCodeActions(doc, new vscode.Range(0, 0, 0, 1), {
+    const actions = provider.provideCodeActions(doc, new vscode.Range(0, 0, 0, Number.MAX_SAFE_INTEGER), {
       diagnostics: [diag],
       only: undefined,
       triggerKind: 1
@@ -218,13 +218,13 @@ describe("Defects Regression Suite (D1, D8, D11, D16)", () => {
     } as unknown as vscode.TextDocument;
 
     const diag = new vscode.Diagnostic(
-      new vscode.Range(14, 0, 14, 1),
+      new vscode.Range(14, 0, 14, Number.MAX_SAFE_INTEGER),
       'Changed symbol "calculateTax" is not listed in scope.modify_symbols. Evidence: return Math.round(order.subtotalCents * 0.09);',
       vscode.DiagnosticSeverity.Error
     );
     diag.source = "Intent Contract";
 
-    const actions = provider.provideCodeActions(doc, new vscode.Range(14, 0, 14, 1), {
+    const actions = provider.provideCodeActions(doc, new vscode.Range(14, 0, 14, Number.MAX_SAFE_INTEGER), {
       diagnostics: [diag],
       only: undefined,
       triggerKind: 1

@@ -13,7 +13,7 @@ export class FindingDiagnostics {
       const filePath = path.join(root, ...finding.file.split("/"));
       const lineIndex = Math.max(0, (finding.line ?? 1) - 1);
       const diagnostic = new vscode.Diagnostic(
-        new vscode.Range(lineIndex, 0, lineIndex, 1),
+        new vscode.Range(lineIndex, 0, lineIndex, Number.MAX_SAFE_INTEGER),
         `${finding.message}. Evidence: ${finding.evidence}`,
         finding.severity === "error" ? vscode.DiagnosticSeverity.Error : vscode.DiagnosticSeverity.Warning
       );

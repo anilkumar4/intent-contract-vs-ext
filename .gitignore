@@ -11,3 +11,5 @@ dist-test/
 .intent/.violations.md
 .intent/waivers.json
 .intent/reports/
+
+media/mermaid.min.js

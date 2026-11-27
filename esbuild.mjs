@@ -24,4 +24,6 @@ if (watch) {
 } else {
   await Promise.all(["dist/extension.js.map", "dist/cli.js.map", "dist/mcp-server.js.map"].map((file) => fs.rm(file, { force: true })));
   await Promise.all(builds.map((options) => esbuild.build(options)));
+  // Bundle Mermaid for the Architecture Inspector webview
+  await fs.copyFile("node_modules/mermaid/dist/mermaid.min.js", "media/mermaid.min.js");
 }
